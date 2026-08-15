@@ -1,13 +1,75 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DBOS Package Skill — getcolors</title>
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-4VKP1WY4QJ"></script>
-<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-4VKP1WY4QJ',{page_title:'DBOS Package Skill — getcolors'});</script>
-<style>body{font:18px/1.6 system-ui;max-width:52rem;margin:4rem auto;padding:0 1.5rem;color:#18202a}code{background:#eef2f5;padding:.15rem .35rem}h1{line-height:1.1}</style></head><body>
-<h1>DBOS Package Skill</h1>
-<p>A production-oriented, single-machine DBOS durable-workflow service on DigitalOcean, with a TypeScript reference API, private PostgreSQL, Cloudflare HTTPS, R2 backups, and restart acceptance checks.</p>
-<pre><code>npx skills add getcolors/dbos
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Provision a production-oriented DBOS durable-workflow service with private PostgreSQL, HTTPS, backups, and reboot acceptance on one DigitalOcean Droplet.">
+  <title>DBOS Package Skill — getcolors</title>
+  <style>
+    :root{color-scheme:light;--ink:#1f2328;--muted:#59636e;--line:#d0d7de;--soft:#f6f8fa;--blue:#0969da;--green:#1a7f37;--warn:#9a6700}*{box-sizing:border-box}body{margin:0;color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:920px;margin:auto;padding:64px 28px 100px}h1{font-size:52px;line-height:1.05;margin:0}h2{margin-top:54px;padding-bottom:8px;border-bottom:1px solid var(--line)}h3{margin-top:30px}.lead{font-size:20px;color:var(--muted);max-width:790px}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}pre{padding:18px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--soft)}:not(pre)>code{padding:.12em .35em;border-radius:5px;background:var(--soft)}a{color:var(--blue)}.eyebrow{color:var(--green);font-weight:700;letter-spacing:.08em}.callout{padding:16px 18px;border-left:4px solid var(--green);background:#dafbe1}.warning{border-color:var(--warn);background:#fff8c5}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.card{padding:18px;border:1px solid var(--line);border-radius:8px}.card h3{margin-top:0}@media(max-width:650px){main{padding-top:38px}.grid{grid-template-columns:1fr}h1{font-size:40px}}
+  </style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-4VKP1WY4QJ"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-4VKP1WY4QJ',{page_title:'DBOS Package Skill — getcolors'});</script>
+</head>
+<body><main>
+  <p class="eyebrow">GREEN PACKAGE SKILL · DIGITALOCEAN · DBOS</p>
+  <h1>DBOS Package Skill</h1>
+  <p class="lead">A reproducible, production-oriented DBOS durable-workflow service on one DigitalOcean Droplet, with a TypeScript reference API, colocated PostgreSQL, Cloudflare HTTPS, R2 backups, and restart acceptance.</p>
+
+  <div class="callout"><strong>Durability is tested across a host reboot.</strong> The reference workflow records its first failed activity attempt, sleeps durably, and completes after the Droplet returns.</div>
+
+  <h2>Quick start</h2>
+  <pre><code>npx skills add getcolors/dbos
+cp .agents/skills/package-dbos-green/green ./green
+chmod +x green
 ./green build
 ./green create --dry-run</code></pre>
-<p>See the repository README for architecture, safety, operations, backup restoration, upgrades, and disaster-recovery limitations.</p>
-</body></html>
+  <p><code>build</code> renders the deployment without credentials. The dry-run walks the complete workflow while skipping side effects. A real <code>create</code>, acceptance run, or deletion touches live infrastructure and requires separate authorization.</p>
+
+  <h2>Architecture</h2>
+  <div class="grid">
+    <div class="card"><h3>Compute</h3><p>OpenTofu discovers the configured region’s default VPC, then creates one Ubuntu Droplet, firewall, and operator SSH key. It does not create a VPC or require a VPC UUID in desired state.</p></div>
+    <div class="card"><h3>Runtime</h3><p>ONCE installs Docker and Caddy and runs the pinned DBOS TypeScript application. PostgreSQL 17 and DBOS share the application container, but PostgreSQL binds only to loopback.</p></div>
+    <div class="card"><h3>Public boundary</h3><p>Cloudflare publishes one apex A record. HTTP, HTTPS, and restricted key-only SSH are the only admitted ports; PostgreSQL and internal DBOS interfaces are never public.</p></div>
+    <div class="card"><h3>Sizing</h3><p>The benchmark uses four shared vCPUs and 8 GiB RAM, leaving room for Node, PostgreSQL, Docker/Caddy, image replacement, and concurrent acceptance checks.</p></div>
+  </div>
+  <p>DBOS SDK <strong>4.25.14</strong> is pinned exactly. This is intentionally a single-node design: process and host restarts recover, but a Droplet, disk, or regional failure causes downtime and there is no automatic failover.</p>
+
+  <h2>Reference workflow</h2>
+  <pre><code>GET  /health
+POST /workflows  {"workflowID":"caller-id","input":"value","delaySeconds":60}
+GET  /workflows/:workflowID</code></pre>
+  <p>The workflow durably sleeps and invokes a retryable activity. The activity records and fails its first attempt, succeeds on its second, and returns a deterministic SHA-256 result over the workflow ID and input. Reusing an ID returns the existing DBOS execution instead of starting duplicate work.</p>
+
+  <h2>Desired state and credentials</h2>
+  <p><code>colors.yml</code> is the only desired-state file. It selects the profile, DigitalOcean region and size, restricted SSH sources, DNS, backend, application host, backup destination, and retention. See the <a href="skills/package-dbos-green/references/configuration.md">configuration reference</a> for every key.</p>
+  <ul>
+    <li>Supply secrets only through matching <code>COLORS_PAR_*</code> environment variables in an ignored <code>.envrc.private</code>.</li>
+    <li>Never export <code>COLORS_PAR_PROFILE</code>; the profile separates remote state.</li>
+    <li>Never edit or commit generated <code>.colors/</code> output.</li>
+    <li>Keep <code>compute-prevent-destroy: true</code>.</li>
+  </ul>
+
+  <h2>Acceptance and operations</h2>
+  <pre><code>./green create
+./scripts/acceptance.sh
+ssh dbos-digitalocean 'docker ps'
+ssh dbos-digitalocean 'journalctl -u docker -u caddy --since=-1h'</code></pre>
+  <p>Acceptance checks HTTPS, exactly two activity attempts, deterministic output, and duplicate-ID behavior. It then starts a delayed workflow, reboots the benchmark Droplet, waits for HTTPS recovery, and verifies the original workflow’s result. Because that script performs a real reboot, run it only against an authorized deployment.</p>
+
+  <h2>Backups, restoration, and upgrades</h2>
+  <p>A daily custom-format <code>pg_dump</code> is uploaded over HTTPS to the configured R2 bucket and prefix, with retention enforced by the container. Test recovery on an isolated replacement: restore into an empty compatible PostgreSQL database, verify DBOS workflow state and activity attempts, then exercise health and workflow retrieval before changing DNS. Never test restoration over the live database.</p>
+  <p>For upgrades, move the exact DBOS version and source together, review workflow compatibility guidance, inspect generated and golden diffs, take a verified backup, and confirm old pending workflows before retiring old code. PostgreSQL major upgrades require a separately tested dump/restore or <code>pg_upgrade</code> plan.</p>
+
+  <div class="callout warning"><strong>Prevent-destroy is not a backup.</strong> Deleting compute does not authorize deleting R2 objects, the discovered default VPC, unrelated DNS, or any other provider resource.</div>
+
+  <h2>Development and source</h2>
+  <pre><code>bb test
+bb golden
+./scripts/launcher.sh
+npm --prefix application run typecheck
+npm --prefix application run build
+npm --prefix application test</code></pre>
+  <p><a href="https://github.com/getcolors/dbos">Source on GitHub</a>. Inspect every golden change; never accept generated output merely to make the suite pass.</p>
+</main></body>
+</html>
