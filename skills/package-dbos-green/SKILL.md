@@ -24,7 +24,7 @@ pinned DBOS reference API with private PostgreSQL and R2 backups.
 ./green build
 ./green create --dry-run
 ./green create
-./scripts/acceptance.sh
+.agents/skills/package-dbos-green/scripts/acceptance.sh
 ```
 
 The acceptance script intentionally reboots the benchmark Droplet and therefore
