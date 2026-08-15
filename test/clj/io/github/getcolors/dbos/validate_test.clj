@@ -31,7 +31,10 @@
   (is (some #(str/includes? % "explicit tag")
             (validate/state-errors (assoc (fixture) :dbos-image "ghcr.io/getcolors/dbos"))))
   (is (some #(str/includes? % "must match")
-            (validate/state-errors (assoc (fixture) :dbos-image "ghcr.io/getcolors/dbos:4.24.0")))))
+            (validate/state-errors (assoc (fixture) :dbos-image "ghcr.io/getcolors/dbos:4.24.0"))))
+  (is (= [] (validate/state-errors
+             (assoc (fixture) :dbos-image
+                    "ghcr.io/getcolors/dbos@sha256:e4824320dc6f4f7b542fb364d977b39341ac8dd892e1a30d09ce6a89af3130a6")))))
 
 (deftest profile-overlay-is-refused
   (is (= "COLORS_PAR_PROFILE" validate/profile-par))
