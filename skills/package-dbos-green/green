@@ -53,7 +53,7 @@
 ;; cannot resolve its own library says so rather than inventing a SHA or
 ;; silently falling back to whatever is lying around. `bb pin` refuses to stamp
 ;; a dirty or unpushed HEAD for the same reason.
-(def ^:private dbos-sha "e76418e9920d2b6cde9cc639a9e701da0eed5738")
+(def ^:private dbos-sha "5b1e728ec2245333801ab9bdec1c26039d9cd2a9")
 
 (def ^:private dbos-git-url "https://github.com/getcolors/dbos.git")
 (def ^:private once-git-url "https://github.com/getcolors/once.git")
