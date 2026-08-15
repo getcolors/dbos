@@ -1,0 +1,174 @@
+#!/usr/local/bin/bb
+
+(require '[cheshire.core :as json]
+         '[babashka.process :as p]
+         '[clojure.string :as str]
+         '[clojure.set :as set])
+
+;;; Ansible module: once
+;;;
+;;; WANT_JSON
+;;;
+;;; Reconciles the desired list of ONCE applications against `once list`.
+;;; Deploys apps that are missing; removes apps that are no longer wanted.
+;;;
+;;; Honors check mode: under `ansible-playbook --check` the only command
+;;; executed is `once list`; the reconciliation is reported as would_deploy and
+;;; would_remove instead of being applied. Ansible does not skip WANT_JSON
+;;; modules in check mode, so the module has to enforce this itself.
+;;;
+;;; Parameters (JSON args file):
+;;;   applications  - required, list of app objects
+;;;   namespace     - optional, default "once"
+;;;   remove_data   - optional bool, default false (passed to `once remove`)
+;;;   teardown      - optional bool, default false (workaround to change settings)
+;;;
+;;; Each app object:
+;;;   image         - required (Docker image)
+;;;   host          - required (hostname, identity key)
+;;;   smtp_server, smtp_port, smtp_username, smtp_password, smtp_from - optional
+;;;   env           - optional list of "KEY=VAL" strings
+;;;   auto_update, auto_backup, backup_path, disable_tls, cpus, memory - optional
+
+(defn exit-json [result]
+  (println (json/generate-string result))
+  (System/exit (if (:failed result) 1 0)))
+
+(defn fail-json
+  ([msg] (fail-json msg {}))
+  ([msg extra] (exit-json (merge {:failed true :changed false :msg msg} extra))))
+
+(def redacted "***")
+
+(defn redact-cmd
+  "Scrub secret values out of an argv before it is reported. `--smtp-password`
+  carries a bare secret; `--env` carries KEY=VALUE, whose key is worth keeping."
+  [cmd]
+  (mapv (fn [prev arg]
+          (case prev
+            "--smtp-password" redacted
+            "--env" (str (first (str/split arg #"=" 2)) "=" redacted)
+            arg))
+        (cons nil cmd)
+        cmd))
+
+(defn scrub
+  "Replace `secrets` wherever they appear in `s`, for output we do not control."
+  [s secrets]
+  (reduce #(str/replace %1 %2 redacted) s secrets))
+
+(defn app-secrets
+  "The values in `app` that must never reach module output."
+  [app]
+  (->> (cons (:smtp_password app)
+             (map #(second (str/split % #"=" 2)) (:env app)))
+       (remove str/blank?)
+       set))
+
+(defn run!
+  ([cmd] (run! cmd #{}))
+  ([cmd secrets]
+   (let [result @(p/process cmd {:out :string :err :string})]
+     (when-not (zero? (:exit result))
+       (fail-json (scrub (str/trim (:err result)) secrets)
+                  {:rc (:exit result) :cmd (redact-cmd cmd)}))
+     result)))
+
+(defn strip-ansi [s]
+  (-> s
+      (str/replace #"\x1b\]8;[^\x07]*\x07" "")
+      (str/replace #"\x1b\[[0-9;]*m" "")))
+
+(defn parse-deployed-hosts [output]
+  (->> (str/split-lines output)
+       (keep #(re-find #"[\w][\w.-]+\.[\w]{2,}(?= \()" %))
+       set))
+
+(defn build-deploy-cmd [namespace app]
+  (cond-> ["once" "-n" namespace "deploy" (:image app) "--host" (:host app)]
+    (:smtp_server app)   (into ["--smtp-server"   (:smtp_server app)])
+    (:smtp_port app)     (into ["--smtp-port"     (str (:smtp_port app))])
+    (:smtp_username app) (into ["--smtp-username" (:smtp_username app)])
+    (:smtp_password app) (into ["--smtp-password" (:smtp_password app)])
+    (:smtp_from app)     (into ["--smtp-from"     (:smtp_from app)])
+    (:auto_update app)   (conj "--auto-update")
+    (:auto_backup app)   (conj "--auto-backup")
+    (:backup_path app)   (into ["--backup-path"   (:backup_path app)])
+    (:disable_tls app)   (conj "--disable-tls")
+    (:cpus app)          (into ["--cpus"           (str (:cpus app))])
+    (:memory app)        (into ["--memory"         (str (:memory app))])
+    (seq (:env app))     (into (mapcat #(vector "--env" %) (:env app)))))
+
+(defn build-remove-cmd [namespace host remove-data?]
+  (cond-> ["once" "-n" namespace "remove" host]
+    remove-data? (conj "--remove-data")))
+
+(defn reconcile [applications namespace remove-data? teardown? check-mode?]
+  (when-not (seq applications)
+    (fail-json "Missing required parameter: applications"))
+  (when (and teardown? (not check-mode?))
+    (run! (cond-> ["once" "-n" namespace "teardown"]
+            remove-data? (conj "--remove-data"))))
+  (let [apps-by-host  (reduce (fn [a e]
+                                (assoc a (:host e) e))
+                              {} applications)
+        desired-hosts (set (keys apps-by-host))
+        list-out      (strip-ansi (:out (run! ["once" "-n" namespace "list"])))
+        deployed      (parse-deployed-hosts list-out)
+        ;; A real teardown empties the namespace before reconciliation. Model
+        ;; that transition in check mode without executing it, or an already
+        ;; converged namespace would incorrectly report changed=false.
+        reconcile-from (if (and teardown? check-mode?) #{} deployed)
+        to-deploy     (set/difference desired-hosts reconcile-from)
+        to-remove     (set/difference reconcile-from desired-hosts)
+        changed?      (boolean (or teardown? (seq to-deploy) (seq to-remove)))
+        diff          {:before (str/join "\n" (sort deployed))
+                       :after  (str/join "\n" (sort desired-hosts))}]
+    (if check-mode?
+      (exit-json {:changed changed?
+                  :would_deploy (vec (sort to-deploy))
+                  :would_remove (vec (sort to-remove))
+                  :diff diff})
+      (do
+        (doseq [host to-remove]
+          (run! (build-remove-cmd namespace host remove-data?)))
+        (doseq [host to-deploy]
+          (let [app (apps-by-host host)]
+            (run! (build-deploy-cmd namespace app) (app-secrets app))))
+        (exit-json {:changed changed?
+                    :deployed (vec to-deploy)
+                    :removed  (vec to-remove)
+                    :diff diff})))))
+
+(defn -main [& args]
+  (let [args-file (first args)]
+    (when-not args-file
+      (fail-json "No args file provided by Ansible"))
+    (let [args (try
+                 (-> args-file slurp (json/parse-string true))
+                 (catch Exception e
+                   (fail-json (str "Failed to parse args file: " (.getMessage e)))))
+          {:keys [applications namespace remove-data teardown _ansible_check_mode]
+           :or   {namespace "once"
+                  remove-data false
+                  teardown false
+                  _ansible_check_mode false}} args]
+      (reconcile applications namespace remove-data teardown
+                 _ansible_check_mode))))
+
+(when (= *file* (System/getProperty "babashka.file"))
+  (apply -main *command-line-args*))
+
+(comment
+  (do
+    (require '[big-config.utils :as utils :refer [debug]])
+    (debug tap-values
+      (with-redefs [exit-json (fn [& args] {:exit-json args})
+                    fail-json (fn [& args] {:fail-json args})]
+        (let [#_#_teardown true
+              applications [{:host "www3.bigconfig.space"
+                             :image "ghcr.io/amiorin/big-config-website"}
+                            {:host "www4.bigconfig.space"
+                             :image "ghcr.io/amiorin/big-config-website"}]]
+          (reconcile applications "once" false true false)))))
+  (-> tap-values))

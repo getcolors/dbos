@@ -1,0 +1,21 @@
+{
+  "name": "dbos-reference-application",
+  "version": "4.25.14",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test dist/*.test.js"
+  },
+  "dependencies": {
+    "@dbos-inc/dbos-sdk": "4.25.14",
+    "pg": "8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "@types/pg": "8.15.5",
+    "typescript": "5.9.2"
+  }
+}

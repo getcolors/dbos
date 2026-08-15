@@ -1,0 +1,30 @@
+- name: "Reconcile ONCE applications"
+  become: true
+  once:
+    applications:
+      - host: "dbos.example.com"
+        image: "ghcr.io/getcolors/dbos:4.25.14"
+        env:
+          - "DBOS_SYSTEM_DATABASE_URL=postgresql://dbos:{{ lookup('env','COLORS_PAR_DBOS_POSTGRES_PASSWORD') }}@127.0.0.1:5432/dbos"
+          - "DBOS_APPLICATION_NAME=dbos-reference"
+          - "DBOS_APPLICATION_VERSION=4.25.14"
+          - "DBOS_SYSTEM_DATABASE_POOL_SIZE=10"
+          - "DBOS_DURABLE_DELAY_SECONDS=60"
+          - "DBOS_STEP_MAX_ATTEMPTS=3"
+          - "DBOS_STEP_INITIAL_RETRY_SECONDS=1"
+          - "DBOS_WORKFLOW_RETENTION_DAYS=30"
+          - "POSTGRES_DB=dbos"
+          - "POSTGRES_USER=dbos"
+          - "POSTGRES_PASSWORD={{ lookup('env','COLORS_PAR_DBOS_POSTGRES_PASSWORD') }}"
+          - "BACKUP_R2_BUCKET=dbos-digitalocean"
+          - "BACKUP_R2_ENDPOINT=https://319271fed8bc6d2d9059362be1165f37.eu.r2.cloudflarestorage.com"
+          - "BACKUP_R2_REGION=auto"
+          - "BACKUP_R2_PREFIX=dbos.example.com"
+          - "BACKUP_RETENTION_DAYS=30"
+          - "BACKUP_ONCALENDAR=*-*-* 02:30:00"
+          - "BACKUP_R2_ACCESS_KEY_ID={{ lookup('env','COLORS_PAR_POSTGRES_BACKUP_R2_ACCESS_KEY_ID') }}"
+          - "BACKUP_R2_SECRET_ACCESS_KEY={{ lookup('env','COLORS_PAR_POSTGRES_BACKUP_R2_SECRET_ACCESS_KEY') }}"
+        smtp_server: "127.0.0.1"
+        smtp_port: 25
+        smtp_username: "unused"
+        smtp_from: "Info <info@notifications.example.com>"

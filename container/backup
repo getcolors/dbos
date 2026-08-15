@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+: "${BACKUP_R2_BUCKET:?}"
+: "${BACKUP_R2_ENDPOINT:?}"
+: "${BACKUP_R2_PREFIX:?}"
+export AWS_ACCESS_KEY_ID="${BACKUP_R2_ACCESS_KEY_ID:?}"
+export AWS_SECRET_ACCESS_KEY="${BACKUP_R2_SECRET_ACCESS_KEY:?}"
+export AWS_DEFAULT_REGION="${BACKUP_R2_REGION:-auto}"
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
+PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom > "$tmp"
+aws --endpoint-url "$BACKUP_R2_ENDPOINT" s3 cp "$tmp" "s3://$BACKUP_R2_BUCKET/$BACKUP_R2_PREFIX/$stamp.dump" --only-show-errors
+printf '%s\n' "$stamp" > /storage/.last-backup
+cutoff=$(date -u -d "${BACKUP_RETENTION_DAYS:-30} days ago" +%s)
+aws --endpoint-url "$BACKUP_R2_ENDPOINT" s3 ls "s3://$BACKUP_R2_BUCKET/$BACKUP_R2_PREFIX/" | while read -r day clock _ key; do
+  case "$key" in
+    *.dump)
+      created=$(date -u -d "$day $clock" +%s)
+      if [ "$created" -lt "$cutoff" ]; then
+        aws --endpoint-url "$BACKUP_R2_ENDPOINT" s3 rm "s3://$BACKUP_R2_BUCKET/$BACKUP_R2_PREFIX/$key" --only-show-errors
+      fi
+      ;;
+  esac
+done

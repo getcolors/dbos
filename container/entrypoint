@@ -1,0 +1,29 @@
+#!/bin/bash
+set -euo pipefail
+: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
+: "${POSTGRES_DB:=dbos}"
+: "${POSTGRES_USER:=dbos}"
+mkdir -p "$PGDATA"; chown -R postgres:postgres /storage
+if [[ ! -s "$PGDATA/PG_VERSION" ]]; then
+  gosu postgres initdb --username="$POSTGRES_USER" --pwfile=<(printf '%s\n' "$POSTGRES_PASSWORD") --auth-host=scram-sha-256 --auth-local=trust
+  printf "listen_addresses = '127.0.0.1'\npassword_encryption = 'scram-sha-256'\n" >> "$PGDATA/postgresql.conf"
+fi
+gosu postgres postgres -D "$PGDATA" & postgres_pid=$!
+cleanup() { kill -TERM "${app_pid:-$postgres_pid}" "$postgres_pid" 2>/dev/null || true; wait || true; }
+trap cleanup EXIT TERM INT
+for _ in $(seq 1 60); do pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" && break; sleep 1; done
+if ! PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d postgres -Atqc "select 1 from pg_database where datname='$POSTGRES_DB'" | grep -q 1; then
+  PGPASSWORD="$POSTGRES_PASSWORD" createdb -h 127.0.0.1 -U "$POSTGRES_USER" "$POSTGRES_DB"
+fi
+chown -R dbos:dbos /app
+cd /app
+gosu dbos node dist/main.js & app_pid=$!
+(
+  sleep 300
+  while kill -0 "$app_pid" 2>/dev/null; do
+    /usr/local/bin/backup || echo "backup failed" >&2
+    sleep 86400
+  done
+) & backup_pid=$!
+wait -n "$app_pid" "$postgres_pid"
+exit 1
