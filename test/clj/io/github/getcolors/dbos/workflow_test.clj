@@ -24,10 +24,12 @@
                          (assoc (fixture) :green/event :delete :compute-prevent-destroy false) {})))))
 
 (deftest graph-creates-and-reverses-only-required-stages
-  (is (= [:dbos/compute]
+  (is (= [:dbos/compute :dbos/backup]
          (vec (rest (workflow/wire-fn :dbos/start {:green/event :create})))))
   (is (= [:dbos/dns]
          (vec (rest (workflow/wire-fn :dbos/compute {:green/event :create})))))
+  (is (= [:dbos/dns]
+         (vec (rest (workflow/wire-fn :dbos/backup {:green/event :create})))))
   (is (= [:dbos/ansible-local :dbos/ansible-remote]
          (vec (rest (workflow/wire-fn :dbos/dns {:green/event :create})))))
   (is (= [:dbos/ansible-cleanup]

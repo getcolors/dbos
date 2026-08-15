@@ -78,6 +78,7 @@ digitalocean-vpc-mode: default
 
 # --- Public HTTPS ------------------------------------------------------------
 
+cloudflare-account-id: 319271fed8bc6d2d9059362be1165f37
 cloudflare-zone: dbos.example.com
 cloudflare-proxied: false
 # Only SSH, HTTP, and HTTPS are public. PostgreSQL and DBOS internal interfaces

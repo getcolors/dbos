@@ -56,8 +56,9 @@
       :dbos/dns [once-tools/tofu-dns-step :dbos/compute]
       :dbos/compute [tools/tofu-compute-step])
     (case step
-      :dbos/start [start-step :dbos/compute]
+      :dbos/start [start-step :dbos/compute :dbos/backup]
       :dbos/compute [tools/tofu-compute-step :dbos/dns]
+      :dbos/backup [tools/tofu-backup-step :dbos/dns]
       :dbos/dns [once-tools/tofu-dns-step :dbos/ansible-local :dbos/ansible-remote]
       :dbos/ansible-local [once-tools/ansible-local-step]
       :dbos/ansible-remote [once-tools/ansible-remote-step])))
@@ -68,12 +69,13 @@
     :key-fn #(str (or (:profile %) "dbos") "/" tool ".tfstate")}))
 
 (def side-effecting-steps
-  [:dbos/compute :dbos/dns :dbos/ansible-local
+  [:dbos/compute :dbos/backup :dbos/dns :dbos/ansible-local
    :dbos/ansible-remote :dbos/ansible-cleanup])
 
 (def workflow
   (-> (wf/workflow {:start :dbos/start :wire-fn wire-fn})
       (wf/advice-add :dbos/compute :before ::backend (backend-advice tools/compute-tool))
+      (wf/advice-add :dbos/backup :before ::backend (backend-advice tools/backup-tool))
       (wf/advice-add :dbos/dns :before ::backend (backend-advice tools/dns-tool))
       progress/advise
       (dry-run/advise side-effecting-steps)))

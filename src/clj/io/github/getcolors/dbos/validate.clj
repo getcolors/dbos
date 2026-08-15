@@ -17,7 +17,7 @@
    :digitalocean-size :digitalocean-image :digitalocean-ssh-authorized-keys
    :digitalocean-ssh-key-name :digitalocean-ssh-private-key :digitalocean-ssh-sources :digitalocean-http-sources
    :digitalocean-https-sources :digitalocean-vpc-mode
-   :cloudflare-zone :cloudflare-proxied])
+   :cloudflare-account-id :cloudflare-zone :cloudflare-proxied])
 
 (def runtime-secrets
   [:do-token :cloudflare-api-token :dbos-postgres-password
