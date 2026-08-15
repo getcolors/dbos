@@ -5,7 +5,11 @@ set -euo pipefail
 : "${POSTGRES_USER:=dbos}"
 mkdir -p "$PGDATA"; chown -R postgres:postgres /storage
 if [[ ! -s "$PGDATA/PG_VERSION" ]]; then
-  gosu postgres initdb --username="$POSTGRES_USER" --pwfile=<(printf '%s\n' "$POSTGRES_PASSWORD") --auth-host=scram-sha-256 --auth-local=trust
+  pwfile=$(mktemp)
+  printf '%s\n' "$POSTGRES_PASSWORD" > "$pwfile"
+  chown postgres:postgres "$pwfile"; chmod 0600 "$pwfile"
+  gosu postgres initdb --username="$POSTGRES_USER" --pwfile="$pwfile" --auth-host=scram-sha-256 --auth-local=trust
+  rm -f "$pwfile"
   printf "listen_addresses = '127.0.0.1'\npassword_encryption = 'scram-sha-256'\n" >> "$PGDATA/postgresql.conf"
 fi
 gosu postgres postgres -D "$PGDATA" & postgres_pid=$!
