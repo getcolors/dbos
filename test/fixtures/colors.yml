@@ -49,10 +49,10 @@ dbos-system-database-pool-size: 10
 
 # Daily encrypted-in-transit PostgreSQL backups are retained independently of
 # the Droplet so operator mistakes or disk loss have a documented restore path.
-postgres-backup-r2-bucket: dbos-digitalocean
+postgres-backup-r2-bucket: tofu-state-319271fed8bc6d2d9059362be1165f37-eu
 postgres-backup-r2-endpoint: https://319271fed8bc6d2d9059362be1165f37.eu.r2.cloudflarestorage.com
 postgres-backup-r2-region: auto
-postgres-backup-r2-prefix: dbos.example.com
+postgres-backup-r2-prefix: dbos-fixture/backups/dbos.example.com
 postgres-backup-retention-days: 30
 postgres-backup-oncalendar: "*-*-* 02:30:00"
 
@@ -78,7 +78,6 @@ digitalocean-vpc-mode: default
 
 # --- Public HTTPS ------------------------------------------------------------
 
-cloudflare-account-id: 319271fed8bc6d2d9059362be1165f37
 cloudflare-zone: dbos.example.com
 cloudflare-proxied: false
 # Only SSH, HTTP, and HTTPS are public. PostgreSQL and DBOS internal interfaces

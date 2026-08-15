@@ -7,7 +7,6 @@
             [io.github.getcolors.dbos.utils :as utils]))
 
 (def compute-tool "tofu-compute")
-(def backup-tool "tofu-backup")
 (def dns-tool "tofu-dns")
 
 (defn tool-dir [opts tool] (once-tools/tool-dir opts tool))
@@ -38,17 +37,6 @@
   (assoc opts :once {:applications [{:host (:dbos-host opts)
                                      :image (:dbos-image opts)
                                      :env (app-env opts)}]}))
-
-(defn tofu-backup-step [opts]
-  (let [dir (tool-dir opts backup-tool)
-        specs [{:template :io.github.getcolors.dbos.tofu-backup/main.tf
-                :target (str dir "/main.tf")
-                :data opts
-                :opts sc/preserve-jinja-delimiters}]
-        env (cond-> (backend-credential-env opts)
-              (:cloudflare-api-token opts)
-              (assoc "CLOUDFLARE_API_TOKEN" (:cloudflare-api-token opts)))]
-    (tofu/tofu-with-spec opts specs {:dir dir :env env})))
 
 (defn- output-params [result]
   (some-> (get-in result [:tofu/outputs :params]) walk/keywordize-keys))
