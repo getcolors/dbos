@@ -15,7 +15,7 @@
    :postgres-backup-r2-prefix :postgres-backup-retention-days
    :postgres-backup-oncalendar :digitalocean-name :digitalocean-region
    :digitalocean-size :digitalocean-image :digitalocean-ssh-authorized-keys
-   :digitalocean-ssh-private-key :digitalocean-ssh-sources :digitalocean-http-sources
+   :digitalocean-ssh-key-name :digitalocean-ssh-private-key :digitalocean-ssh-sources :digitalocean-http-sources
    :digitalocean-https-sources :digitalocean-vpc-mode
    :cloudflare-zone :cloudflare-proxied])
 

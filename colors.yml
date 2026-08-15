@@ -65,6 +65,7 @@ digitalocean-region: ams3
 digitalocean-size: s-4vcpu-8gb
 digitalocean-image: ubuntu-24-04-x64
 digitalocean-ssh-authorized-keys: ~/.ssh/id_ed25519.pub
+digitalocean-ssh-key-name: vaultwarden-digitalocean
 digitalocean-ssh-private-key: ~/.ssh/id_ed25519
 
 # Restrict administrative SSH to the Phase 2 operator's current public IPv4.

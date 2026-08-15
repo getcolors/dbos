@@ -18,9 +18,10 @@ data "digitalocean_vpc" "default" {
   region = "<{ digitalocean-region }>"
 }
 
-resource "digitalocean_ssh_key" "operator" {
-  name       = "<{ digitalocean-name }>-operator"
-  public_key = trimspace(file(pathexpand("<{ digitalocean-ssh-authorized-keys }>")))
+# Reuse the configured account key by name. It is data, not a deployment-owned
+# resource, so this workflow can never delete the pre-existing key.
+data "digitalocean_ssh_key" "operator" {
+  name = "<{ digitalocean-ssh-key-name }>"
 }
 
 resource "digitalocean_droplet" "node1" {
@@ -29,7 +30,7 @@ resource "digitalocean_droplet" "node1" {
   size     = "<{ digitalocean-size }>"
   image    = "<{ digitalocean-image }>"
   vpc_uuid = data.digitalocean_vpc.default.id
-  ssh_keys = [digitalocean_ssh_key.operator.fingerprint]
+  ssh_keys = [data.digitalocean_ssh_key.operator.id]
 
   connection {
     type        = "ssh"

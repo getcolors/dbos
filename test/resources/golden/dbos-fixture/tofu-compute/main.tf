@@ -18,9 +18,10 @@ data "digitalocean_vpc" "default" {
   region = "ams3"
 }
 
-resource "digitalocean_ssh_key" "operator" {
-  name       = "dbos-fixture-operator"
-  public_key = trimspace(file(pathexpand("~/.ssh/id_ed25519.pub")))
+# Reuse the configured account key by name. It is data, not a deployment-owned
+# resource, so this workflow can never delete the pre-existing key.
+data "digitalocean_ssh_key" "operator" {
+  name = "vaultwarden-digitalocean"
 }
 
 resource "digitalocean_droplet" "node1" {
@@ -29,7 +30,7 @@ resource "digitalocean_droplet" "node1" {
   size     = "s-4vcpu-8gb"
   image    = "ubuntu-24-04-x64"
   vpc_uuid = data.digitalocean_vpc.default.id
-  ssh_keys = [digitalocean_ssh_key.operator.fingerprint]
+  ssh_keys = [data.digitalocean_ssh_key.operator.id]
 
   connection {
     type        = "ssh"
