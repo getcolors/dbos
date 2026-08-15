@@ -5,7 +5,7 @@
       - host: "dbos.example.com"
         image: "ghcr.io/getcolors/dbos:4.25.14"
         env:
-          - "DBOS_SYSTEM_DATABASE_URL=postgresql://dbos:{{ lookup('env','COLORS_PAR_DBOS_POSTGRES_PASSWORD') }}@127.0.0.1:5432/dbos"
+          - "DBOS_POSTGRES_PASSWORD={{ lookup('env','COLORS_PAR_DBOS_POSTGRES_PASSWORD') }}"
           - "DBOS_APPLICATION_NAME=dbos-reference"
           - "DBOS_APPLICATION_VERSION=4.25.14"
           - "DBOS_SYSTEM_DATABASE_POOL_SIZE=10"

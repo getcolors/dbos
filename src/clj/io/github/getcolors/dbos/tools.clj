@@ -13,9 +13,7 @@
 (defn backend-credential-env [opts] (once-tools/backend-credential-env opts))
 
 (defn app-env [opts]
-  [(str "DBOS_SYSTEM_DATABASE_URL=postgresql://dbos:"
-        (utils/par-lookup :dbos-postgres-password)
-        "@127.0.0.1:5432/" (:postgres-database opts))
+  [(str "DBOS_POSTGRES_PASSWORD=" (utils/par-lookup :dbos-postgres-password))
    (str "DBOS_APPLICATION_NAME=" (:dbos-application-name opts))
    (str "DBOS_APPLICATION_VERSION=" (:dbos-version opts))
    (str "DBOS_SYSTEM_DATABASE_POOL_SIZE=" (:dbos-system-database-pool-size opts))

@@ -3,7 +3,9 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg from 'pg';
 import { deterministicResult, WorkflowResult } from './result.js';
 
-const databaseUrl = required('DBOS_SYSTEM_DATABASE_URL');
+const postgresPassword = required('DBOS_POSTGRES_PASSWORD');
+const postgresDatabase = process.env.POSTGRES_DB ?? 'dbos';
+const databaseUrl = `postgresql://dbos:${encodeURIComponent(postgresPassword)}@127.0.0.1:5432/${encodeURIComponent(postgresDatabase)}`;
 const defaultDelay = positiveInt(process.env.DBOS_DURABLE_DELAY_SECONDS ?? '60', 'DBOS_DURABLE_DELAY_SECONDS');
 const maxAttempts = positiveInt(process.env.DBOS_STEP_MAX_ATTEMPTS ?? '3', 'DBOS_STEP_MAX_ATTEMPTS');
 const retrySeconds = positiveInt(process.env.DBOS_STEP_INITIAL_RETRY_SECONDS ?? '1', 'DBOS_STEP_INITIAL_RETRY_SECONDS');
