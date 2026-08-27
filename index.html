@@ -13,7 +13,7 @@
 <script src="https://rybbit.getcolors.ai/api/script.js" data-site-id="9fb9c41a6d49" defer></script>
 </head>
 <body><main>
-  <p class="eyebrow">GREEN PACKAGE SKILL · DIGITALOCEAN · DBOS</p>
+  <p class="eyebrow">GREEN · RED · BLUE PACKAGE SKILL · DIGITALOCEAN · DBOS</p>
   <h1>DBOS Package Skill</h1>
   <p class="lead">A reproducible, production-oriented DBOS durable-workflow service on one DigitalOcean Droplet, with a TypeScript reference API, colocated PostgreSQL, Cloudflare HTTPS, R2 backups, and restart acceptance.</p>
 
@@ -25,6 +25,7 @@ cp .agents/skills/package-dbos-green/green ./green
 chmod +x green
 ./green build
 ./green create --dry-run</code></pre>
+<p>Equivalent Red and Blue skills ship <code>red</code> and <code>blue</code> launchers.</p>
   <p><code>build</code> renders the deployment without credentials. The dry-run walks the complete workflow while skipping side effects. A real <code>create</code>, acceptance run, or deletion touches live infrastructure and requires separate authorization.</p>
 
   <h2>Architecture</h2>
