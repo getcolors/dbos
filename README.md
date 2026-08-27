@@ -1,6 +1,7 @@
 # dbos
 
-A Green Package Skill for DBOS durable workflows on one DigitalOcean Droplet.
+A tri-colour Package Skill (green, red, blue) for DBOS durable workflows on one
+DigitalOcean Droplet.
 The deployment embeds `@dbos-inc/dbos-sdk` **4.25.14** in a TypeScript HTTP API,
 runs PostgreSQL 17 on the same machine, publishes only HTTPS through ONCE and
 Cloudflare, and writes daily PostgreSQL backups to Cloudflare R2.
@@ -43,12 +44,14 @@ execution and is reported as a duplicate.
 ## Lifecycle and acceptance
 
 ```sh
-./green build
-./green create --dry-run
-./green create
+cd green && ./green build
+cd green && ./green create --dry-run
+cd green && ./green create
 ./scripts/acceptance.sh
 ```
 
+The same verbs run through the other two colours (`red/red`, `blue/blue`);
+`scripts/parity.sh` proves the three render byte-identical artifacts.
 Build and dry-run require no credentials. The acceptance script checks HTTPS,
 completion, exactly two activity attempts, duplicate-ID behavior and the result
 hash. It then starts a workflow in its durable delay, reboots the entire Droplet

@@ -14,12 +14,12 @@
 ;; they carry ONCE's stage names and the profile is the ONLY thing separating
 ;; this project's state from a once-colors' in the same bucket.
 ;;
-;; This file is both the skill payload and the repository entry point — ./green
-;; in the project root is a symlink to it. It deliberately holds no logic of its
-;; own: validation, the graph and the steps all live in the `dbos` library,
-;; where the test suite reaches them. A copied payload is the one place in this
-;; project where code cannot be tested, so nothing that can live elsewhere
-;; should live here. scripts/launcher.sh covers what remains.
+;; This file is both the skill payload and the repository entry point —
+;; green/green in the repository is a symlink to it. It deliberately holds no
+;; logic of its own: validation, the graph and the steps all live in the `dbos`
+;; library, where the test suite reaches them. A copied payload is the one place
+;; in this project where code cannot be tested, so nothing that can live
+;; elsewhere should live here. scripts/launcher.sh covers what remains.
 
 (require '[babashka.fs :as fs]
          '[clojure.java.io :as io]
@@ -53,7 +53,7 @@
 ;; cannot resolve its own library says so rather than inventing a SHA or
 ;; silently falling back to whatever is lying around. `bb pin` refuses to stamp
 ;; a dirty or unpushed HEAD for the same reason.
-(def ^:private dbos-sha "b3541c9a744f7f62c508a5ac38ae15eb0245b1ff")
+(def ^:private dbos-sha nil)
 
 (def ^:private dbos-git-url "https://github.com/getcolors/dbos.git")
 (def ^:private once-git-url "https://github.com/getcolors/once.git")
@@ -62,7 +62,7 @@
 (defn- lib-coord
   [env-var url sha deps-root]
   (if-let [root (System/getenv env-var)]
-    {:local/root root}
+    {:local/root (if deps-root (str (io/file root deps-root)) root)}
     (when sha
       (cond-> {:git/url url :git/sha sha}
         deps-root (assoc :deps/root deps-root)))))
@@ -72,7 +72,7 @@
 
 (def ^:private bootstrap-error
   (when (and (System/getProperty "babashka.version") (not resolved?))
-    (let [dbos (lib-coord "DBOS_LIB_ROOT" dbos-git-url dbos-sha nil)
+    (let [dbos (lib-coord "DBOS_LIB_ROOT" dbos-git-url dbos-sha "green")
           once (lib-coord "ONCE_LIB_ROOT" once-git-url nil "green")
           green (lib-coord "GREEN_LIB_ROOT" green-git-url nil nil)]
       (if-not dbos

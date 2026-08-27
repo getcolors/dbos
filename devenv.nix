@@ -2,5 +2,5 @@
 {
   languages.clojure.enable = true;
   languages.opentofu.enable = true;
-  packages = with pkgs; [ ansible babashka curl doctl git jq openssh ];
+  packages = with pkgs; [ ansible babashka bun curl doctl git jq openssh uv ];
 }

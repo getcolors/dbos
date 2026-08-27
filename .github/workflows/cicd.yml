@@ -13,8 +13,17 @@ jobs:
       - uses: DeLaGuardo/setup-clojure@13.4
         with:
           bb: latest
+      - uses: oven-sh/setup-bun@v2
+      - uses: astral-sh/setup-uv@v5
       - run: bb test
+        working-directory: green
       - run: bb golden
+        working-directory: green
+      - run: bun install && bun test && bun run typecheck
+        working-directory: red
+      - run: uv run pytest
+        working-directory: blue
+      - run: ./scripts/parity.sh
       - run: ./scripts/launcher.sh
       - uses: actions/setup-node@v4
         with:

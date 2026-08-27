@@ -8,3 +8,5 @@
 target/
 node_modules/
 application/dist/
+__pycache__/
+*.pyc
