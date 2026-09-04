@@ -18,26 +18,30 @@ data "digitalocean_vpc" "default" {
   region = "<{ digitalocean-region }>"
 }
 
-# Reuse the configured account key by name. It is data, not a deployment-owned
-# resource, so this workflow can never delete the pre-existing key.
-data "digitalocean_ssh_key" "operator" {
-  name = "<{ digitalocean-ssh-key-name }>"
+<% if ssh-keygen %># The machine keypair this deployment generated and owns (SSH Keypair
+# Standard): the account resource is named after the profile and lives in this
+# stack's state, which is what makes its ownership decidable. Never reference a
+# literal key id here in keygen mode.
+resource "digitalocean_ssh_key" "machine" {
+  name       = "<{ profile }>"
+  public_key = trimspace(file("<{ ssh-public-key-path }>"))
 }
 
-resource "digitalocean_droplet" "node1" {
-  name     = "<{ digitalocean-name }>"
+<% endif %>resource "digitalocean_droplet" "node1" {
+  name     = "<{ compute-name }>"
   region   = "<{ digitalocean-region }>"
   size     = "<{ digitalocean-size }>"
   image    = "<{ digitalocean-image }>"
   vpc_uuid = data.digitalocean_vpc.default.id
-  ssh_keys = [data.digitalocean_ssh_key.operator.id]
-
+<% if ssh-keygen %>  ssh_keys = [digitalocean_ssh_key.machine.id]
+<% else %>  ssh_keys = ["<{ digitalocean-ssh-keys }>"]
+<% endif %>
   connection {
-    type        = "ssh"
-    user        = "root"
-    host        = self.ipv4_address
-    private_key = file(pathexpand("<{ digitalocean-ssh-private-key }>"))
-  }
+    type = "ssh"
+    user = "root"
+    host = self.ipv4_address
+<% if ssh-keygen %>    private_key = file("<{ ssh-private-key-path }>")
+<% endif %>  }
 
   provisioner "remote-exec" {
     inline = ["cloud-init status --wait"]
@@ -54,25 +58,29 @@ resource "digitalocean_droplet" "node1" {
 }
 
 resource "digitalocean_firewall" "node1" {
-  name        = "<{ digitalocean-name }>"
+  name        = "<{ compute-name }>"
   droplet_ids = [digitalocean_droplet.node1.id]
 
   inbound_rule {
     protocol         = "tcp"
     port_range       = "22"
-    source_addresses = <{ digitalocean-ssh-sources-hcl|safe }>
+    source_addresses = <{ ssh-sources-hcl|safe }>
   }
 
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "80"
-    source_addresses = <{ digitalocean-http-sources-hcl|safe }>
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "443"
-    source_addresses = <{ digitalocean-https-sources-hcl|safe }>
+  # 80 and 443 from the HTTP sources, and nothing else. A rule with no source
+  # is not "closed" to DigitalOcean but an API error, so the HTTP rules are
+  # emitted only when there is a source to name; an empty http-sources list
+  # means no public HTTP at all.
+  dynamic "inbound_rule" {
+    for_each = length(<{ http-sources-hcl|safe }>) > 0 ? [
+      { protocol = "tcp", port_range = "80" },
+      { protocol = "tcp", port_range = "443" },
+    ] : []
+    content {
+      protocol         = inbound_rule.value.protocol
+      port_range       = inbound_rule.value.port_range
+      source_addresses = <{ http-sources-hcl|safe }>
+    }
   }
 
   outbound_rule {
@@ -95,10 +103,12 @@ resource "digitalocean_firewall" "node1" {
 
 output "params" {
   value = {
+    provider = "digitalocean"
     ip       = digitalocean_droplet.node1.ipv4_address
     sudoer   = "root"
-    name     = "<{ profile }>"
+    name     = "<{ compute-name }>"
     user     = "root"
     vpc_uuid = data.digitalocean_vpc.default.id
-  }
+<% if ssh-keygen %>    ssh_key_id = digitalocean_ssh_key.machine.id
+<% endif %>  }
 }

@@ -30,9 +30,9 @@ chmod +x green
 
   <h2>Architecture</h2>
   <div class="grid">
-    <div class="card"><h3>Compute</h3><p>OpenTofu discovers the configured region’s default VPC, then creates one Ubuntu Droplet, firewall, and operator SSH key. It does not create a VPC or require a VPC UUID in desired state.</p></div>
+    <div class="card"><h3>Compute</h3><p>One compute provider, DigitalOcean (<code>provider-compute: digitalocean</code>, credential <code>COLORS_PAR_DO_TOKEN</code>), the single entry in the package’s provider registry per the workspace Compute Provider Standard. OpenTofu discovers the configured region’s default VPC, then creates one Ubuntu Droplet and its firewall; in keygen mode it registers the deployment’s own machine key as an account key named after the profile. It does not create a VPC or require a VPC UUID in desired state.</p></div>
     <div class="card"><h3>Runtime</h3><p>ONCE installs Docker and Caddy and runs the pinned DBOS TypeScript application. PostgreSQL 17 and DBOS share the application container, but PostgreSQL binds only to loopback.</p></div>
-    <div class="card"><h3>Public boundary</h3><p>Cloudflare publishes one apex A record. HTTP, HTTPS, and restricted key-only SSH are the only admitted ports; PostgreSQL and internal DBOS interfaces are never public.</p></div>
+    <div class="card"><h3>Public boundary</h3><p>Cloudflare publishes one apex A record. TCP 80 and 443 from <code>digitalocean-http-sources</code> and key-only SSH from <code>digitalocean-ssh-sources</code> are the only admitted ports; PostgreSQL and internal DBOS interfaces are never public.</p></div>
     <div class="card"><h3>Sizing</h3><p>The benchmark uses four shared vCPUs and 8 GiB RAM, leaving room for Node, PostgreSQL, Docker/Caddy, image replacement, and concurrent acceptance checks.</p></div>
   </div>
   <p>DBOS SDK <strong>4.25.14</strong> is pinned exactly. This is intentionally a single-node design: process and host restarts recover, but a Droplet, disk, or regional failure causes downtime and there is no automatic failover.</p>
@@ -44,7 +44,7 @@ GET  /workflows/:workflowID</code></pre>
   <p>The workflow durably sleeps and invokes a retryable activity. The activity records and fails its first attempt, succeeds on its second, and returns a deterministic SHA-256 result over the workflow ID and input. Reusing an ID returns the existing DBOS execution instead of starting duplicate work.</p>
 
   <h2>Desired state and credentials</h2>
-  <p><code>colors.yml</code> is the only desired-state file. It selects the profile, DigitalOcean region and size, restricted SSH sources, DNS, backend, application host, backup destination, and retention. See the <a href="skills/package-dbos-green/references/configuration.md">configuration reference</a> for every key.</p>
+  <p><code>colors.yml</code> is the only desired-state file. It selects the profile, DigitalOcean region and size, restricted SSH sources, DNS, backend, application host, backup destination, and retention. With no <code>digitalocean-ssh-keys</code> the package generates and owns the machine keypair <code>~/.ssh/&lt;profile&gt;</code>; an explicit account key id opts out. See the <a href="skills/package-dbos-green/references/configuration.md">configuration reference</a> for every key, including the retired ones a pre-standard <code>colors.yml</code> may still carry.</p>
   <ul>
     <li>Supply secrets only through matching <code>COLORS_PAR_*</code> environment variables in an ignored <code>.envrc.private</code>.</li>
     <li>Never export <code>COLORS_PAR_PROFILE</code>; the profile separates remote state.</li>
@@ -57,6 +57,7 @@ GET  /workflows/:workflowID</code></pre>
 ./scripts/acceptance.sh
 ssh dbos-digitalocean 'docker ps'
 ssh dbos-digitalocean 'journalctl -u docker -u caddy --since=-1h'</code></pre>
+  <p>A real <code>create</code> writes a managed <code>Host &lt;profile&gt;</code> block into <code>~/.ssh/config</code> after the Droplet exists and before it is converged, so the profile is the SSH alias; <code>delete</code> removes the block before the destroy and the generated keypair after it. A hand-written stanza for the same alias makes the create refuse rather than overwrite it.</p>
   <p>Acceptance checks HTTPS, exactly two activity attempts, deterministic output, and duplicate-ID behavior. It then starts a delayed workflow, reboots the benchmark Droplet, waits for HTTPS recovery, and verifies the original workflow’s result. Because that script performs a real reboot, run it only against an authorized deployment.</p>
 
   <h2>Backups, restoration, and upgrades</h2>
@@ -66,8 +67,10 @@ ssh dbos-digitalocean 'journalctl -u docker -u caddy --since=-1h'</code></pre>
   <div class="callout warning"><strong>Prevent-destroy is not a backup.</strong> Deleting compute does not authorize deleting R2 objects, the discovered default VPC, unrelated DNS, or any other provider resource.</div>
 
   <h2>Development and source</h2>
-  <pre><code>bb test
-bb golden
+  <pre><code>cd green &amp;&amp; bb test &amp;&amp; bb golden
+cd red &amp;&amp; bun test &amp;&amp; bun run typecheck
+cd blue &amp;&amp; uv run pytest
+./scripts/parity.sh
 ./scripts/launcher.sh
 npm --prefix application run typecheck
 npm --prefix application run build

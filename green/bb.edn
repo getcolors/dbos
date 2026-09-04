@@ -4,16 +4,20 @@
  {test {:doc "Run the Babashka test suite"
         :requires ([clojure.test :as t]
                    [io.github.getcolors.dbos.validate-test]
+                   [io.github.getcolors.dbos.ssh-test]
+                   [io.github.getcolors.dbos.ssh-config-test]
                    [io.github.getcolors.dbos.tools-test]
                    [io.github.getcolors.dbos.workflow-test])
         :task (let [{:keys [fail error]}
                     (t/run-tests 'io.github.getcolors.dbos.validate-test
+                                 'io.github.getcolors.dbos.ssh-test
+                                 'io.github.getcolors.dbos.ssh-config-test
                                  'io.github.getcolors.dbos.tools-test
                                  'io.github.getcolors.dbos.workflow-test)]
                 (System/exit (if (pos? (+ fail error)) 1 0)))}
-  golden {:doc "Diff rendered output against the committed golden"
+  golden {:doc "Diff rendered output against the committed goldens"
           :task (shell "../scripts/golden.sh")}
-  golden:accept {:doc "Regenerate the committed golden after inspecting it"
+  golden:accept {:doc "Regenerate the committed goldens after inspecting them"
                  :task (shell "../scripts/golden.sh" "--accept")}
   pin {:doc "Stamp the bundled launcher after a clean pushed commit"
        :task (load-file "tasks/pin.clj")}}}

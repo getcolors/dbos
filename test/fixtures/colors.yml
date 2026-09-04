@@ -58,22 +58,27 @@ postgres-backup-oncalendar: "*-*-* 02:30:00"
 
 # --- DigitalOcean ------------------------------------------------------------
 
+# Optional: the Droplet and its firewall are named after the profile unless
+# this says otherwise (Compute Name Standard). Set here to the profile, as the
+# live deployment sets it, so the rendered name does not change.
 digitalocean-name: dbos-fixture
 digitalocean-region: ams3
 # Four shared vCPUs and 8 GiB RAM leave headroom for PostgreSQL, Node, Caddy,
 # deployment services, and restart acceptance checks on the single machine.
 digitalocean-size: s-4vcpu-8gb
 digitalocean-image: ubuntu-24-04-x64
-digitalocean-ssh-authorized-keys: ~/.ssh/id_ed25519.pub
-digitalocean-ssh-key-name: vaultwarden-digitalocean
-digitalocean-ssh-private-key: ~/.ssh/id_ed25519
+# Opt-out mode of the SSH Keypair Standard: an existing account key id, used
+# exactly as given and never created or deleted by this deployment. Remove the
+# key to have the package generate and own ~/.ssh/<profile> instead.
+digitalocean-ssh-keys: "00000000"
 
 # Restrict administrative SSH to the Phase 2 operator's current public IPv4.
 digitalocean-ssh-sources:
   - 129.159.242.163/32
 
-# The package must discover the configured region's default VPC at runtime.
-# There is deliberately no VPC UUID, VPC CIDR, or VPC resource in desired state.
+# Retired: there was only ever one value. The regional default VPC is
+# discovered at runtime; a VPC UUID or CIDR is refused. Accepted and ignored,
+# kept here because the live deployment still carries it.
 digitalocean-vpc-mode: default
 
 # --- Public HTTPS ------------------------------------------------------------
@@ -82,9 +87,12 @@ cloudflare-zone: dbos.example.com
 cloudflare-proxied: false
 # Only SSH, HTTP, and HTTPS are public. PostgreSQL and DBOS internal interfaces
 # remain private; HTTP is retained for certificate issuance and HTTPS redirect.
+# Ports 80 and 443 both open to these sources.
 digitalocean-http-sources:
   - 0.0.0.0/0
   - "::/0"
+# Retired: 443 now follows digitalocean-http-sources. Accepted and ignored,
+# kept here because the live deployment still carries it.
 digitalocean-https-sources:
   - 0.0.0.0/0
   - "::/0"

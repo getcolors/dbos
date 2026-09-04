@@ -24,11 +24,11 @@
        "# [tool.uv.sources]\n"
        "# package-dbos-blue = { git = \"https://github.com/getcolors/dbos.git\", rev = \"" sha "\", subdirectory = \"blue\" }\n"
        "# blue = { git = \"https://github.com/getcolors/blue.git\", rev = \"290f313ead5ca162875c33a049c880da017eae09\" }\n"
-       "# package-once-blue = { git = \"https://github.com/getcolors/once.git\", rev = \"69527114b8bd1ead0b92dc1b08e6bf9a446c341a\", subdirectory = \"blue\" }\n"
+       "# package-once-blue = { git = \"https://github.com/getcolors/once.git\", rev = \"38e3cd66674a32fb96605e1b17ae6791086ad5c1\", subdirectory = \"blue\" }\n"
        "#\n"
-       ;; package-once-blue at the frozen ONCE pin carries its own, older blue
-       ;; pin (369c5aa); the override makes this package's blue pin win, as it
-       ;; does in blue/pyproject.toml.
+       ;; package-once-blue now pins the same blue rev; the override is kept,
+       ;; as in blue/pyproject.toml, so this package's blue pin wins again were
+       ;; ONCE ever to pin an older one.
        "# [tool.uv]\n"
        "# override-dependencies = [\"blue @ git+https://github.com/getcolors/blue.git@290f313ead5ca162875c33a049c880da017eae09\"]\n"
        "# ///"))

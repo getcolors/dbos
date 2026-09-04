@@ -13,13 +13,16 @@ The package is pinned exactly and does not use the `4.26.x-preview` line.
 
 ## Architecture and sizing
 
-OpenTofu retrieves the configured region's default VPC with the official
-`digitalocean_vpc` data source, then creates one Droplet, firewall, and operator
-SSH key. It never creates a VPC and desired state contains no VPC UUID. ONCE
-installs Docker and Caddy and runs one application container. Inside that
-container PostgreSQL binds only to loopback and DBOS runs as a library in the
-Node API. Cloudflare receives one apex A record. Ports 80/443 and restricted SSH
-are the only firewall ingress.
+The compute provider is DigitalOcean, the one entry in the package's provider
+registry (`provider-compute: digitalocean`, per the workspace Compute Provider
+Standard). OpenTofu retrieves the configured region's default VPC with the
+official `digitalocean_vpc` data source, then creates one Droplet and its
+firewall; in keygen mode it also registers the deployment's own machine key
+as an account key named after the profile. It never creates a VPC and desired
+state contains no VPC UUID. ONCE installs Docker and Caddy and runs one
+application container. Inside that container PostgreSQL binds only to loopback
+and DBOS runs as a library in the Node API. Cloudflare receives one apex A
+record. Ports 80/443 and restricted SSH are the only firewall ingress.
 
 The benchmark chooses `s-4vcpu-8gb` (4 shared vCPUs, 8 GiB RAM). This leaves
 headroom for PostgreSQL, Node, Docker/Caddy, image replacement, and concurrent
@@ -51,19 +54,29 @@ cd green && ./green create
 ```
 
 The same verbs run through the other two colours (`red/red`, `blue/blue`);
-`scripts/parity.sh` proves the three render byte-identical artifacts.
-Build and dry-run require no credentials. The acceptance script checks HTTPS,
-completion, exactly two activity attempts, duplicate-ID behavior and the result
-hash. It then starts a workflow in its durable delay, reboots the entire Droplet
-with `doctl`, waits for HTTPS recovery, and verifies status and result.
+`scripts/parity.sh` proves the three render byte-identical artifacts for both
+keypair modes. Build and dry-run require no credentials and never read
+`~/.ssh`. The acceptance script checks HTTPS, completion, exactly two activity
+attempts, duplicate-ID behavior and the result hash. It then starts a workflow
+in its durable delay, reboots the entire Droplet with `doctl`, waits for HTTPS
+recovery, and verifies status and result.
 
-Services are reconciled by ONCE. Inspect remotely with the managed SSH alias:
+Services are reconciled by ONCE. A real `create` writes a managed
+`Host <profile>` block into `~/.ssh/config` (the SSH Config Standard), so the
+profile is the alias and no address, user or identity file has to be
+remembered:
 
 ```sh
 ssh dbos-digitalocean 'docker ps'
 ssh dbos-digitalocean 'docker logs --tail 200 $(docker ps -q --filter label=host=bigconfig.space)'
 ssh dbos-digitalocean 'journalctl -u docker -u caddy --since=-1h'
 ```
+
+The machine keypair follows the SSH Keypair Standard: with no
+`digitalocean-ssh-keys` in `colors.yml` the first real `create` generates
+`~/.ssh/<profile>` and registers it at DigitalOcean under the profile's name;
+an explicit key id opts out. See the configuration reference for the two
+layouts of `~/.ssh/config` that make a create refuse by design.
 
 ## Backups and restoration
 

@@ -1,0 +1,18 @@
+{
+  "all" : {
+    "children" : {
+      "admin" : {
+        "hosts" : {
+          "root@192.0.2.10" : {
+            "ansible_host" : "192.0.2.10",
+            "ansible_user" : "root",
+            "ansible_ssh_private_key_file" : "/home/build-placeholder/.ssh/dbos-keygen-fixture"
+          }
+        }
+      },
+      "users" : {
+        "hosts" : { }
+      }
+    }
+  }
+}

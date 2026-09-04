@@ -1,18 +1,30 @@
 // Steps and template data, the port of io.github.getcolors.dbos.tools.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import * as ansible from "red/ansible";
 import { ansibleStep } from "red/ansible";
 import { PRESERVE_JINJA_DELIMITERS, contentSpec, scaffold, type RenderOpts, type Spec, type Template } from "red/scaffold";
 import * as tofu from "red/tofu";
 import { failed, type Opts } from "red/workflow";
-import { tools as onceTools } from "package-once-red";
+import { compute, tools as onceTools } from "package-once-red";
+import * as sshConfig from "./ssh-config.ts";
 import { parLookup, registrableDomain } from "./utils.ts";
+import * as validate from "./validate.ts";
 
-import computeMainTf from "../resources/tofu-compute/main.tf" with { type: "text" };
+import ansibleLocalCfg from "../resources/tools/ansible-local/ansible.cfg" with { type: "text" };
+import ansibleLocalInventory from "../resources/tools/ansible-local/inventory.ini" with { type: "text" };
+import ansibleLocalMain from "../resources/tools/ansible-local/main.yml" with { type: "text" };
+import infrastructureDigitaloceanTf from "../resources/tools/infrastructure/digitalocean/main.tf" with { type: "text" };
 
+// The compute and DNS stages keep ONCE's stage names, deliberately. The
+// compute stage's name keys the remote state (`<profile>/tofu-compute.tfstate`
+// through backendAdvice) and the DNS stage is what the deployment knows; the
+// Compute Provider Standard constrains the template's source path, not the
+// rendered target. The local stage is this package's own and named after it.
 export const computeTool = "tofu-compute";
 export const dnsTool = "tofu-dns";
-const templateOpts: RenderOpts = PRESERVE_JINJA_DELIMITERS;
+export const ansibleLocalTool = "dbos-ansible-local";
+export const templateOpts: RenderOpts = PRESERVE_JINJA_DELIMITERS;
 
 export function toolDir(opts: Opts, tool: string): string {
   return onceTools.toolDir(opts, tool);
@@ -20,6 +32,38 @@ export function toolDir(opts: Opts, tool: string): string {
 
 export function backendCredentialEnv(opts: Opts): Record<string, string> | undefined {
   return onceTools.backendCredentialEnv(opts);
+}
+
+// The backend's credentials plus the selected compute provider's, from ONCE's
+// registry over this package's spec. Unset credentials are omitted, so build
+// and dry-run stay credential-free.
+export function computeCredentialEnv(opts: Opts): Record<string, string> | undefined {
+  const env: Record<string, string> = { ...(backendCredentialEnv(opts) ?? {}) };
+  for (const [key, envVar] of Object.entries(validate.tofuEnv(opts, "provider-compute"))) {
+    const value = String(opts[key] ?? "");
+    if (value.length > 0) env[envVar] = value;
+  }
+  return Object.keys(env).length > 0 ? env : undefined;
+}
+
+// The template tree this colour carries, keyed the way green names its
+// classpath resources: "<path>/<file>" with dots as directories.
+const templates: Record<string, string> = {
+  "ansible-local/ansible.cfg": ansibleLocalCfg,
+  "ansible-local/inventory.ini": ansibleLocalInventory,
+  "ansible-local/main.yml": ansibleLocalMain,
+  "infrastructure/digitalocean/main.tf": infrastructureDigitaloceanTf,
+};
+
+export function template(path: string, file: string): Template {
+  const name = `${path.replaceAll(".", "/")}/${file}`;
+  const content = templates[name];
+  if (content === undefined) throw new Error(`template not found: ${name}`);
+  return { name, content };
+}
+
+function spec(source: Template, target: string, data: Opts): Spec {
+  return { template: source, target, data, opts: templateOpts };
 }
 
 const str = (value: unknown) => (value == null ? "" : String(value));
@@ -61,33 +105,99 @@ export function withOnceShape(opts: Opts): Opts {
   };
 }
 
-function outputParams(result: Opts): Record<string, unknown> | undefined {
-  const params = (result["tofu/outputs"] as Record<string, unknown> | undefined)?.params;
-  return params && typeof params === "object" ? params as Record<string, unknown> : undefined;
+// ---------------------------------------------------------------- compute
+
+// What `build` and `--dry-run` render in place of a compute output: the
+// documentation address, shaped like the real `params` so every later stage
+// sees the same keys either way. ONCE's.
+export const fallbackParams = compute.fallbackParams;
+
+// Refuse to hand 192.0.2.10 to Ansible on a real converge whose compute output
+// carries no `ip`. ONCE's; `tofuComputeStep` is what wires it.
+export const resolvedCompute = compute.resolvedCompute;
+
+// The bridge to ONCE's composed stages. `onceTools.tofuDnsStep` and the
+// remote stage read the machine's address, user and name as
+// `once/compute-params`, the key ONCE's own compute step sets; this package's
+// compute step sets it from the same params it merges at top level — real,
+// fallback, or, on delete, the ones adopted from state — so the ONCE stages
+// keep working unchanged.
+export function withComputeParams(opts: Opts, params: compute.Params): Opts {
+  return { ...opts, "once/compute-params": params };
+}
+
+// Template values for the compute stage. The name, the keypair mode and the
+// source lists are resolved here once, so the template interpolates values
+// and never branches on which provider it belongs to.
+export function computeData(opts: Opts): Opts {
+  return {
+    ...opts,
+    "ssh-keygen": validate.keygen(opts),
+    "compute-name": validate.computeName(opts),
+    "ssh-sources-hcl": tofu.hclList(validate.cidrs(opts, validate.computeKey(opts, "ssh-sources"))),
+    "http-sources-hcl": tofu.hclList(validate.cidrs(opts, validate.computeKey(opts, "http-sources"))),
+  };
+}
+
+// Providers are selected by template directory, `infrastructure/<provider>/`,
+// not by conditionals inside one file; the rendered target is the same
+// `tofu-compute/main.tf` whichever directory it came from.
+export function computeTemplate(opts: Opts): Template {
+  return template(`infrastructure.${opts["provider-compute"]}`, "main.tf");
 }
 
 export async function tofuComputeStep(opts: Opts): Promise<Opts> {
   const dir = toolDir(opts, computeTool);
-  const data: Opts = {
-    ...opts,
-    "digitalocean-ssh-sources-hcl": tofu.hclList((opts["digitalocean-ssh-sources"] as string[] | undefined) ?? []),
-    "digitalocean-http-sources-hcl": tofu.hclList((opts["digitalocean-http-sources"] as string[] | undefined) ?? []),
-    "digitalocean-https-sources-hcl": tofu.hclList((opts["digitalocean-https-sources"] as string[] | undefined) ?? []),
-  };
-  const specs: Spec[] = [{
-    template: { name: "tofu-compute/main.tf", content: computeMainTf },
-    target: `${dir}/main.tf`,
-    data,
-    opts: templateOpts,
-  }];
-  let env = backendCredentialEnv(opts);
-  if (opts["do-token"]) env = { ...(env ?? {}), DIGITALOCEAN_TOKEN: String(opts["do-token"]) };
-  const result = await tofu.tofuWithSpec(opts, specs, { dir, env });
-  const fallback = { ip: "192.168.0.1", sudoer: "root", name: opts.profile, user: "root" };
+  const specs = [spec(computeTemplate(opts), `${dir}/main.tf`, computeData(opts))];
+  const result = await tofu.tofuWithSpec(opts, specs, { dir, env: computeCredentialEnv(opts) });
+  const fallback = fallbackParams(opts);
   if (failed(result)) return result;
-  if (opts["red/event"] === "build") return { ...result, "once/compute-params": fallback };
+  if (opts["red/event"] === "build") return withComputeParams({ ...result, ...fallback }, fallback);
   if (opts["red/event"] === "delete") return result;
-  return { ...result, "once/compute-params": { ...fallback, ...(outputParams(result) ?? {}) } };
+  const outputs = compute.outputParams(result);
+  const resolved = resolvedCompute(result, fallback, outputs);
+  return failed(resolved) ? resolved : withComputeParams(resolved, { ...fallback, ...(outputs ?? {}) });
+}
+
+// ---------------------------------------------------------- ansible (local)
+
+// Only what a `build` genuinely knows. The address, the user and the alias are
+// run-time facts and reach the play as extra-vars instead, so the rendered
+// playbook carries no IP and is identical on every workstation (SSH Config
+// Standard §6).
+export function ansibleLocalData(opts: Opts): Opts {
+  return {
+    ...opts,
+    "ssh-keygen": validate.keygen(opts),
+    "ssh-config-identity-file": sshConfig.identityFile(opts),
+  };
+}
+
+export function ansibleLocalSpecs(opts: Opts): Spec[] {
+  const dir = toolDir(opts, ansibleLocalTool);
+  const data = ansibleLocalData(opts);
+  return [
+    spec(template("ansible-local", "ansible.cfg"), `${dir}/ansible.cfg`, data),
+    spec(template("ansible-local", "inventory.ini"), `${dir}/inventory.ini`, data),
+    spec(template("ansible-local", "main.yml"), `${dir}/main.yml`, data),
+  ];
+}
+
+// Write or remove the `~/.ssh/config` block. The same playbook serves both
+// events; `block_state` is what distinguishes them.
+export async function ansibleLocalStep(opts: Opts): Promise<Opts> {
+  const dir = toolDir(opts, ansibleLocalTool);
+  const del = opts["red/event"] === "delete";
+  return ansible.ansibleWithSpec(opts, {
+    dir, inventory: "inventory.ini",
+    playbooks: { create: "main.yml", delete: "main.yml" },
+    extraVars: {
+      host_alias: sshConfig.hostAlias(opts),
+      ip: opts.ip ?? fallbackParams(opts).ip,
+      user: opts.user ?? "root",
+      block_state: del ? "absent" : "present",
+    },
+  }, ansibleLocalSpecs(opts));
 }
 
 // ---------------------------------------------------------------------------
@@ -174,14 +284,14 @@ export function ansibleOnce(opts: Opts): string {
 function ansibleRemoteSpecs(opts: Opts): Spec[] {
   const dir = toolDir(opts, "ansible-remote");
   const data = dataFn(opts);
-  const spec = (template: Template, target: string): Spec => ({ template, target, data, opts: templateOpts });
+  const remoteSpec = (source: Template, target: string): Spec => ({ template: source, target, data, opts: templateOpts });
   return [
-    spec(onceTemplate("ansible/ansible.cfg"), `${dir}/ansible.cfg`),
-    spec(onceTemplate("ansible/main.yml"), `${dir}/main.yml`),
-    spec(onceTemplate("ansible/files/authorized-keys"), `${dir}/files/authorized-keys`),
+    remoteSpec(onceTemplate("ansible/ansible.cfg"), `${dir}/ansible.cfg`),
+    remoteSpec(onceTemplate("ansible/main.yml"), `${dir}/main.yml`),
+    remoteSpec(onceTemplate("ansible/files/authorized-keys"), `${dir}/files/authorized-keys`),
     contentSpec(`${dir}/deploy_keys`, onceTools.deployKeysContent(opts)),
-    spec(onceTemplate("ansible/files/deploy"), `${dir}/files/deploy`),
-    spec(onceTemplate("ansible/library/once"), `${dir}/library/once`),
+    remoteSpec(onceTemplate("ansible/files/deploy"), `${dir}/files/deploy`),
+    remoteSpec(onceTemplate("ansible/library/once"), `${dir}/library/once`),
     contentSpec(`${dir}/inventory.json`, onceTools.inventory(data)),
     contentSpec(`${dir}/once.yml`, ansibleOnce(data)),
   ];

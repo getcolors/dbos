@@ -18,25 +18,18 @@ data "digitalocean_vpc" "default" {
   region = "ams3"
 }
 
-# Reuse the configured account key by name. It is data, not a deployment-owned
-# resource, so this workflow can never delete the pre-existing key.
-data "digitalocean_ssh_key" "operator" {
-  name = "vaultwarden-digitalocean"
-}
-
 resource "digitalocean_droplet" "node1" {
   name     = "dbos-fixture"
   region   = "ams3"
   size     = "s-4vcpu-8gb"
   image    = "ubuntu-24-04-x64"
   vpc_uuid = data.digitalocean_vpc.default.id
-  ssh_keys = [data.digitalocean_ssh_key.operator.id]
+  ssh_keys = ["00000000"]
 
   connection {
-    type        = "ssh"
-    user        = "root"
-    host        = self.ipv4_address
-    private_key = file(pathexpand("~/.ssh/id_ed25519"))
+    type = "ssh"
+    user = "root"
+    host = self.ipv4_address
   }
 
   provisioner "remote-exec" {
@@ -63,16 +56,20 @@ resource "digitalocean_firewall" "node1" {
     source_addresses = ["129.159.242.163/32"]
   }
 
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "80"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "443"
-    source_addresses = ["0.0.0.0/0", "::/0"]
+  # 80 and 443 from the HTTP sources, and nothing else. A rule with no source
+  # is not "closed" to DigitalOcean but an API error, so the HTTP rules are
+  # emitted only when there is a source to name; an empty http-sources list
+  # means no public HTTP at all.
+  dynamic "inbound_rule" {
+    for_each = length(["0.0.0.0/0", "::/0"]) > 0 ? [
+      { protocol = "tcp", port_range = "80" },
+      { protocol = "tcp", port_range = "443" },
+    ] : []
+    content {
+      protocol         = inbound_rule.value.protocol
+      port_range       = inbound_rule.value.port_range
+      source_addresses = ["0.0.0.0/0", "::/0"]
+    }
   }
 
   outbound_rule {
@@ -95,6 +92,7 @@ resource "digitalocean_firewall" "node1" {
 
 output "params" {
   value = {
+    provider = "digitalocean"
     ip       = digitalocean_droplet.node1.ipv4_address
     sudoer   = "root"
     name     = "dbos-fixture"

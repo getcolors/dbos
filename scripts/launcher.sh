@@ -15,6 +15,8 @@ cp "$root/test/fixtures/colors.yml" "$tmp/colors.yml"
 (cd "$tmp" && DBOS_LIB_ROOT="$root" ./green build >/dev/null)
 [[ -f "$tmp/.colors/dbos-fixture/tofu-compute/main.tf" ]]
 [[ -f "$tmp/.colors/dbos-fixture/ansible-remote/once.yml" ]]
+[[ -f "$tmp/.colors/dbos-fixture/dbos-ansible-local/main.yml" ]]
+[[ ! -d "$tmp/.colors/dbos-fixture/ansible-local" ]]
 # The launcher walks up for colors.yml, so any subdirectory works.
 mkdir -p "$tmp/a/b"
 (cd "$tmp/a/b" && DBOS_LIB_ROOT="$root" ../../green build >/dev/null)
