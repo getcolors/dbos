@@ -39,7 +39,7 @@ import { homedir } from "node:os";
 // directory, which would halt Bun's upward resolution of `package-dbos-red`
 // and break the development symlink at red/red.
 const PINS = {
-  "package-dbos-red": "github:getcolors/dbos#42e844ef248f1898b99993006ee593a9cd055bf1",
+  "package-dbos-red": "github:getcolors/dbos#9b34dc1e3a129dc1686203e3ea2f6d89464d9016",
   "package-once-red": "github:getcolors/once#38e3cd66674a32fb96605e1b17ae6791086ad5c1",
   "red": "github:getcolors/red#db9bfe61282e2093f4098bf5a6ee0cd10added6e",
 };
