@@ -1,20 +1,17 @@
 ---
 name: package-dbos-blue
-description: Provisions a single-machine DBOS TypeScript durable-workflow service with colocated PostgreSQL on DigitalOcean. Use for build, dry-run, deployment, acceptance, recovery, upgrade, or authorized deletion.
+description: Provisions a single-machine DBOS TypeScript durable-workflow service with colocated PostgreSQL using colors-compute. Use for build, dry-run, deployment, acceptance, recovery, upgrade, or authorized deletion.
 license: MIT
 ---
 
 # DBOS with Blue
 
 Operate one production-oriented DBOS deployment from non-secret `colors.yml`.
-The package supports one compute provider, DigitalOcean
-(`provider-compute: digitalocean`, credential `COLORS_PAR_DO_TOKEN`). It
-discovers the configured region's default DigitalOcean VPC, creates one
-protected Droplet and its firewall, generates and owns the machine keypair
-`~/.ssh/<profile>` unless `digitalocean-ssh-keys` names an existing account
-key, writes a managed `Host <profile>` block into `~/.ssh/config`, manages
-Cloudflare DNS and ONCE HTTPS, and deploys the pinned DBOS reference API with
-private PostgreSQL and R2 backups.
+The package calls colors-compute directly for a host on Azure, AWS, Google,
+DigitalOcean, Hetzner, Vultr, Yandex or OCI, with state in R2 or S3. The
+library owns compute validation, resources and machine keys. The package
+owns its SSH alias play and reuses ONCE for Cloudflare DNS and the application.
+PostgreSQL remains private and backups remain independent of compute.
 
 ## Safety
 
@@ -23,7 +20,6 @@ private PostgreSQL and R2 backups.
 - Never set `COLORS_PAR_PROFILE`, edit `.colors/`, or expose PostgreSQL.
 - Keep `compute-prevent-destroy: true`; deletion requires separate authorization.
 - Run `build`, dry-run, tests, golden, and launcher checks before real create.
-- Never create/delete a VPC or copy a discovered VPC UUID into desired state.
 - A real create refuses a hand-written `Host <profile>` stanza in
   `~/.ssh/config`, a key on disk with no state, or an account key of the
   profile's name it does not own; each message names the recovery. Do not
@@ -38,5 +34,10 @@ private PostgreSQL and R2 backups.
 .agents/skills/package-dbos-blue/scripts/acceptance.sh
 ```
 
-The acceptance script intentionally reboots the benchmark Droplet and therefore
+The acceptance script intentionally reboots the configured host through its SSH alias and therefore
 must run only under real-deployment authorization.
+
+Provider additions require only a colors-compute version bump. A legacy
+`tofu-compute.tfstate` requires explicit migration before the new lifecycle can
+create resources. Compute no-infra and local state are unsupported. Build and
+dry-run do not generate keys or inspect live compute state.

@@ -8,7 +8,8 @@ import { parName } from "red/cli";
 import { placeholder } from "red/providers";
 import type { Opts } from "red/workflow";
 import { compute, providers as onceProviders } from "package-once-red";
-import { onceSsh } from "./once.ts";
+import { credential_requirements, keyMode, registry } from "colors-compute-red";
+import * as machine from "./machine.ts";
 
 // provider-compute -> what that choice implies.
 //
@@ -23,14 +24,7 @@ import { onceSsh } from "./once.ts";
 // Two keys the template reads are deliberately not required. `digitalocean-name`
 // is an optional override of the profile (Compute Name Standard), and
 // `digitalocean-ssh-keys` is meaningful by its absence (SSH Keypair Standard).
-export const computeProviders: compute.Registry = {
-  digitalocean: {
-    required: ["digitalocean-region", "digitalocean-size", "digitalocean-image",
-               "digitalocean-ssh-sources", "digitalocean-http-sources"],
-    secrets: ["do-token"],
-    tofuEnv: { "do-token": "DIGITALOCEAN_TOKEN" },
-  },
-};
+export const computeProviders: compute.Registry = Object.fromEntries(Object.entries(registry.compute).map(([name,entry]) => [name,{required:[...entry.required],secrets:[...entry.secrets],tofuEnv:{...entry['tofu-env']}}]));
 
 // The provider a deployment created before this package recorded one in its
 // compute output must be running: the only one it ever offered. The
@@ -114,7 +108,7 @@ export const computeName = compute.computeName;
 // Whether this deployment owns its machine keypair. Delegates to ONCE, the
 // standard's reference implementation, so one rule decides it everywhere.
 export function keygen(opts: Opts): boolean {
-  return onceSsh.keygen(opts);
+  return keyMode(machine.clean(opts)).mode === 'managed';
 }
 
 // A source list as desired state or an overlay string carries it. ONCE's, so
@@ -139,7 +133,7 @@ function isInteger(value: unknown): value is number {
 // `spec`. The retired keys are not looked at.
 export function stateErrors(opts: Opts): string[] {
   const errors: string[] = [];
-  for (const key of [...required, ...compute.requiredKeys(spec, opts)]) {
+  for (const key of required) {
     if (placeholder(opts[key])) errors.push(`:${key} is required`);
   }
   if (!placeholder(opts["dbos-host"]) && !hostRe.test(String(opts["dbos-host"]))) {
@@ -174,7 +168,7 @@ export function stateErrors(opts: Opts): string[] {
   if (isInteger(pool) && pool < 5) {
     errors.push(":dbos-system-database-pool-size must be at least 5 for production");
   }
-  errors.push(...compute.stateErrors(spec, opts));
+  errors.push(...machine.errors(opts));
   return errors;
 }
 
@@ -185,7 +179,7 @@ export function backendSecrets(opts: Opts): string[] {
 // Credentials every real create and delete needs: the selected compute
 // provider's, Cloudflare's, and the backend's.
 export function infrastructureSecrets(opts: Opts): string[] {
-  return [...compute.secrets(spec, opts), "cloudflare-api-token", ...backendSecrets(opts)];
+  return [...credential_requirements(machine.clean(opts)).map(key=>key.slice(11).toLowerCase().replaceAll('_','-')), 'cloudflare-api-token'];
 }
 
 // The credentials a real `event` needs. A create needs the application secrets

@@ -7,7 +7,8 @@
             [io.github.getcolors.once.tools :as once-tools]
             [io.github.getcolors.dbos.ssh-config :as ssh-config]
             [io.github.getcolors.dbos.utils :as utils]
-            [io.github.getcolors.dbos.validate :as validate]))
+            [io.github.getcolors.dbos.validate :as validate]
+            [io.github.getcolors.dbos.machine :as machine]))
 
 ;; The compute and DNS stages keep ONCE's stage names, deliberately. The
 ;; compute stage's name keys the remote state (`<profile>/tofu-compute.tfstate`
@@ -64,59 +65,9 @@
 
 ;; ---------------------------------------------------------------- compute
 
-(def fallback-params
-  "What `build` and `--dry-run` render in place of a compute output: the
-  documentation address, shaped like the real `params` so every later stage
-  sees the same keys either way. ONCE's."
-  compute/fallback-params)
-
-(def resolved-compute
-  "Refuse to hand 192.0.2.10 to Ansible on a real converge whose compute
-  output carries no `ip`. ONCE's; `tofu-compute-step` is what wires it."
-  compute/resolved-compute)
-
-(defn with-compute-params
-  "The bridge to ONCE's composed stages. `once-tools/tofu-dns-step` and
-  `once-tools/ansible-remote-step` read the machine's address, user and name
-  as `:once/compute-params`, the key ONCE's own compute step sets; this
-  package's compute step sets it from the same params it merges at top level
-  — real, fallback, or, on delete, the ones adopted from state — so the
-  ONCE stages keep working unchanged."
-  [opts params]
-  (assoc opts :once/compute-params params))
-
-(defn compute-data
-  "Template values for the compute stage. The name, the keypair mode and the
-  source lists are resolved here once, so the template interpolates values
-  and never branches on which provider it belongs to."
-  [opts]
-  (assoc opts
-         :ssh-keygen (validate/keygen? opts)
-         :compute-name (validate/compute-name opts)
-         :ssh-sources-hcl (tofu/hcl-list (validate/cidrs opts (validate/compute-key opts "ssh-sources")))
-         :http-sources-hcl (tofu/hcl-list (validate/cidrs opts (validate/compute-key opts "http-sources")))))
-
-(defn compute-template
-  "Providers are selected by template directory, `infrastructure/<provider>/`,
-  not by conditionals inside one file; the rendered target is the same
-  `tofu-compute/main.tf` whichever directory it came from."
-  [opts]
-  (template (str "infrastructure." (:provider-compute opts)) "main.tf"))
-
-(defn tofu-compute-step [opts]
-  (let [dir (tool-dir opts compute-tool)
-        specs [(spec (compute-template opts) (str dir "/main.tf") (compute-data opts))]
-        result (tofu/tofu-with-spec opts specs {:dir dir :env (compute-credential-env opts)})
-        fallback (fallback-params opts)]
-    (cond
-      (wf/failed? result) result
-      (= :build (:green/event opts)) (with-compute-params (merge result fallback) fallback)
-      (= :delete (:green/event opts)) result
-      :else (let [outputs (compute/output-params result)
-                  resolved (resolved-compute result fallback outputs)]
-              (if (wf/failed? resolved)
-                resolved
-                (with-compute-params resolved (merge fallback outputs)))))))
+(def fallback-params machine/fallback-params)
+(defn with-compute-params [opts params] (assoc (merge opts params) :once/compute-params params))
+(def tofu-compute-step machine/step)
 
 ;; ---------------------------------------------------------- ansible (local)
 
@@ -146,7 +97,14 @@
       {:dir dir :inventory "inventory.ini"
        :playbooks {:create "main.yml" :delete "main.yml"}
        :extra-vars {:host_alias (ssh-config/host-alias opts)
-                    :ip (or (:ip opts) (:ip (fallback-params opts)))
-                    :user (or (:user opts) "root")
+                    :ssh_hosts [{:name (:profile opts) :ip (:ip opts) :user (:user opts) :identity_file (:ssh-private-key-path opts)}]
                     :block_state (if delete? "absent" "present")}}
       (ansible-local-specs opts))))
+
+
+(defn bootstrap-step [opts]
+  (let [dir (tool-dir opts "dbos-bootstrap")]
+    (ansible/ansible-with-spec opts
+      {:dir dir :inventory "inventory.json" :playbooks {:create "main.yml"} :host-key-checking false}
+      [(spec (template "bootstrap" "main.yml") (str dir "/main.yml") opts)
+       (sc/content-spec (str dir "/inventory.json") (once-tools/inventory (assoc opts :hosts [(:ip opts)] :users [])))])))

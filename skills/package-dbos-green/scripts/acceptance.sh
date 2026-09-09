@@ -30,16 +30,13 @@ jq -e '.activityAttempts == 2 and .result.activityAttempts == 2' <<<"$completed"
 expected=$(printf '%s' "$id:$input" | sha256sum | cut -d' ' -f1)
 jq -e --arg expected "$expected" '.result.result == $expected' <<<"$completed" >/dev/null
 
-# Prove recovery across an entire Droplet reboot while DBOS.sleep is pending.
-: "${COLORS_PAR_DO_TOKEN:?COLORS_PAR_DO_TOKEN is required for restart acceptance}"
-export DIGITALOCEAN_ACCESS_TOKEN=$COLORS_PAR_DO_TOKEN
+# Prove recovery across a host reboot while DBOS.sleep is pending.
+ssh_alias=${DBOS_ACCEPTANCE_SSH_HOST:-dbos-digitalocean}
 restart_id="restart-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM"
 curl --fail --silent --show-error -X POST "$base/workflows" -H 'content-type: application/json' \
   --data "$(jq -nc --arg id "$restart_id" '{workflowID:$id,input:"restart-recovery",delaySeconds:90}')" >/dev/null
 sleep 5
-droplet_id=$(doctl compute droplet list --format ID,Name --no-header | awk '$2=="dbos-digitalocean" {print $1}')
-[[ -n $droplet_id ]]
-doctl compute droplet-action reboot "$droplet_id" --wait >/dev/null
+ssh "$ssh_alias" 'sudo -n systemd-run --on-active=2s /usr/sbin/reboot'
 for _ in {1..90}; do curl --fail --silent "$base/health" >/dev/null && break; sleep 5; done
 recovered=$(wait_for_result "$restart_id")
 jq -e '.status == "SUCCESS" and .activityAttempts == 2 and .result.activityAttempts == 2' <<<"$recovered" >/dev/null

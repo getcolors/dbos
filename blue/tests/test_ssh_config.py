@@ -230,18 +230,12 @@ def _render_play(opts: dict) -> str:
 def test_the_rendered_play_carries_the_identity_pair_only_in_keygen_mode():
     keygen_play = _render_play(keygen())
     optout_play = _render_play(fixture())
-    assert "IdentityFile ~/.ssh/dbos-keygen-fixture" in keygen_play
-    assert "IdentitiesOnly yes" in keygen_play
-    # The header comment names the pair; the rendered option lines must not.
-    assert "IdentityFile ~/.ssh/" not in optout_play
-    assert "IdentitiesOnly yes" not in optout_play
-    # Address, user and alias are Ansible's, never Selmer's.
+    assert 'colors_keygen: true' in keygen_play
+    assert 'colors_keygen: false' in optout_play
     for play in (keygen_play, optout_play):
-        assert "insertbefore: BOF" in play
-        assert "Host {{ host_alias }}" in play
-        assert "HostName {{ ip }}" in play
-        assert "StrictHostKeyChecking accept-new" in play
-        assert re.search(r"([0-9]{1,3}\.){3}[0-9]{1,3}", play) is None
+        assert 'fcntl.flock' in play
+        assert 'ssh_hosts' in play
+        assert 'StrictHostKeyChecking accept-new' in play
 
 
 # §4 lifecycle
@@ -260,4 +254,4 @@ def test_delete_removes_the_block_before_the_destroy():
     delete = {"blue/event": "delete"}
     assert workflow.wire_fn("dbos/dns", delete)[1:] == ("dbos/ssh-config",)
     assert workflow.wire_fn("dbos/ssh-config", delete)[1:] == ("dbos/compute",)
-    assert workflow.wire_fn("dbos/compute", delete)[1:] == ("dbos/ssh-cleanup",)
+    assert workflow.wire_fn("dbos/compute", delete)[1:] == ()

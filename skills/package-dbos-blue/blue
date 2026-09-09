@@ -1,15 +1,10 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["package-dbos-blue", "blue", "package-once-blue"]
+# dependencies = ["package-dbos-blue"]
 #
 # [tool.uv.sources]
 # package-dbos-blue = { git = "https://github.com/getcolors/dbos.git", rev = "9b34dc1e3a129dc1686203e3ea2f6d89464d9016", subdirectory = "blue" }
-# blue = { git = "https://github.com/getcolors/blue.git", rev = "290f313ead5ca162875c33a049c880da017eae09" }
-# package-once-blue = { git = "https://github.com/getcolors/once.git", rev = "38e3cd66674a32fb96605e1b17ae6791086ad5c1", subdirectory = "blue" }
-#
-# [tool.uv]
-# override-dependencies = ["blue @ git+https://github.com/getcolors/blue.git@290f313ead5ca162875c33a049c880da017eae09"]
 # ///
 #
 # Managed by `bb pin` — do not edit by hand, and never invent a SHA.

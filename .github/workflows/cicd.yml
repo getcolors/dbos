@@ -24,6 +24,8 @@ jobs:
       - run: uv run pytest
         working-directory: blue
       - run: ./scripts/parity.sh
+      - run: uv run --with ansible-core python ../scripts/ssh-config-probe.py
+        working-directory: blue
       - run: ./scripts/launcher.sh
       - uses: actions/setup-node@v4
         with:

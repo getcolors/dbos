@@ -1,0 +1,12 @@
+---
+- name: Prepare the application host
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Wait for SSH
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+    - name: Wait for cloud-init when installed
+      become: true
+      ansible.builtin.shell: if command -v cloud-init >/dev/null 2>&1; then cloud-init status --wait; fi
+      changed_when: false

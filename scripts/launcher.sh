@@ -13,7 +13,7 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cp "$launcher" "$tmp/green"; chmod +x "$tmp/green"
 cp "$root/test/fixtures/colors.yml" "$tmp/colors.yml"
 (cd "$tmp" && DBOS_LIB_ROOT="$root" ./green build >/dev/null)
-[[ -f "$tmp/.colors/dbos-fixture/tofu-compute/main.tf" ]]
+[[ -f "$tmp/.colors/dbos-fixture/tofu-compute/nodes/0/node-none.tf.json" ]]
 [[ -f "$tmp/.colors/dbos-fixture/ansible-remote/once.yml" ]]
 [[ -f "$tmp/.colors/dbos-fixture/dbos-ansible-local/main.yml" ]]
 [[ ! -d "$tmp/.colors/dbos-fixture/ansible-local" ]]

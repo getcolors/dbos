@@ -1,5 +1,5 @@
 // Bump on any change a launcher pinned to an older commit could not survive.
-export const contract = 1;
+export const contract = 2;
 
 // The registrable domain of a host: its last two labels, the port of
 // io.github.getcolors.dbos.utils/registrable-domain.

@@ -10,11 +10,12 @@ import { compute, tools as onceTools } from "package-once-red";
 import * as sshConfig from "./ssh-config.ts";
 import { parLookup, registrableDomain } from "./utils.ts";
 import * as validate from "./validate.ts";
+import * as machine from "./machine.ts";
 
 import ansibleLocalCfg from "../resources/tools/ansible-local/ansible.cfg" with { type: "text" };
 import ansibleLocalInventory from "../resources/tools/ansible-local/inventory.ini" with { type: "text" };
 import ansibleLocalMain from "../resources/tools/ansible-local/main.yml" with { type: "text" };
-import infrastructureDigitaloceanTf from "../resources/tools/infrastructure/digitalocean/main.tf" with { type: "text" };
+import bootstrapMain from "../resources/tools/bootstrap/main.yml" with {type:"text"};
 
 // The compute and DNS stages keep ONCE's stage names, deliberately. The
 // compute stage's name keys the remote state (`<profile>/tofu-compute.tfstate`
@@ -52,7 +53,7 @@ const templates: Record<string, string> = {
   "ansible-local/ansible.cfg": ansibleLocalCfg,
   "ansible-local/inventory.ini": ansibleLocalInventory,
   "ansible-local/main.yml": ansibleLocalMain,
-  "infrastructure/digitalocean/main.tf": infrastructureDigitaloceanTf,
+  "bootstrap/main.yml": bootstrapMain,
 };
 
 export function template(path: string, file: string): Template {
@@ -107,57 +108,9 @@ export function withOnceShape(opts: Opts): Opts {
 
 // ---------------------------------------------------------------- compute
 
-// What `build` and `--dry-run` render in place of a compute output: the
-// documentation address, shaped like the real `params` so every later stage
-// sees the same keys either way. ONCE's.
-export const fallbackParams = compute.fallbackParams;
-
-// Refuse to hand 192.0.2.10 to Ansible on a real converge whose compute output
-// carries no `ip`. ONCE's; `tofuComputeStep` is what wires it.
-export const resolvedCompute = compute.resolvedCompute;
-
-// The bridge to ONCE's composed stages. `onceTools.tofuDnsStep` and the
-// remote stage read the machine's address, user and name as
-// `once/compute-params`, the key ONCE's own compute step sets; this package's
-// compute step sets it from the same params it merges at top level — real,
-// fallback, or, on delete, the ones adopted from state — so the ONCE stages
-// keep working unchanged.
-export function withComputeParams(opts: Opts, params: compute.Params): Opts {
-  return { ...opts, "once/compute-params": params };
-}
-
-// Template values for the compute stage. The name, the keypair mode and the
-// source lists are resolved here once, so the template interpolates values
-// and never branches on which provider it belongs to.
-export function computeData(opts: Opts): Opts {
-  return {
-    ...opts,
-    "ssh-keygen": validate.keygen(opts),
-    "compute-name": validate.computeName(opts),
-    "ssh-sources-hcl": tofu.hclList(validate.cidrs(opts, validate.computeKey(opts, "ssh-sources"))),
-    "http-sources-hcl": tofu.hclList(validate.cidrs(opts, validate.computeKey(opts, "http-sources"))),
-  };
-}
-
-// Providers are selected by template directory, `infrastructure/<provider>/`,
-// not by conditionals inside one file; the rendered target is the same
-// `tofu-compute/main.tf` whichever directory it came from.
-export function computeTemplate(opts: Opts): Template {
-  return template(`infrastructure.${opts["provider-compute"]}`, "main.tf");
-}
-
-export async function tofuComputeStep(opts: Opts): Promise<Opts> {
-  const dir = toolDir(opts, computeTool);
-  const specs = [spec(computeTemplate(opts), `${dir}/main.tf`, computeData(opts))];
-  const result = await tofu.tofuWithSpec(opts, specs, { dir, env: computeCredentialEnv(opts) });
-  const fallback = fallbackParams(opts);
-  if (failed(result)) return result;
-  if (opts["red/event"] === "build") return withComputeParams({ ...result, ...fallback }, fallback);
-  if (opts["red/event"] === "delete") return result;
-  const outputs = compute.outputParams(result);
-  const resolved = resolvedCompute(result, fallback, outputs);
-  return failed(resolved) ? resolved : withComputeParams(resolved, { ...fallback, ...(outputs ?? {}) });
-}
+export const fallbackParams = machine.fallbackParams;
+export function withComputeParams(opts:Opts,params:Opts):Opts { return {...opts,...params,'once/compute-params':params}; }
+export const tofuComputeStep = machine.step;
 
 // ---------------------------------------------------------- ansible (local)
 
@@ -193,8 +146,7 @@ export async function ansibleLocalStep(opts: Opts): Promise<Opts> {
     playbooks: { create: "main.yml", delete: "main.yml" },
     extraVars: {
       host_alias: sshConfig.hostAlias(opts),
-      ip: opts.ip ?? fallbackParams(opts).ip,
-      user: opts.user ?? "root",
+      ssh_hosts:[{name:opts.profile,ip:opts.ip,user:opts.user,identity_file:opts['ssh-private-key-path']}],
       block_state: del ? "absent" : "present",
     },
   }, ansibleLocalSpecs(opts));
@@ -221,7 +173,7 @@ function onceTemplate(name: string): Template {
 }
 
 function dataFn(data: Opts): Opts {
-  return { ...data, sudoer: data.sudoer ?? "root", hosts: [data.ip ?? "64.227.72.100"], users: [] };
+  return { ...data, sudoer: data.sudoer ?? "root", hosts: [data.ip], users: [] };
 }
 
 // The yaml writer ONCE's colours share, copied because ONCE does not export it.
@@ -302,4 +254,13 @@ export async function ansibleRemoteStep(opts: Opts): Promise<Opts> {
   const rendered = scaffold(opts, ansibleRemoteSpecs(opts));
   if (["build", "delete"].includes(String(opts["red/event"]))) return rendered;
   return ansibleStep(rendered, { dir, inventory: "inventory.json", playbooks: { create: "main.yml" }, hostKeyChecking: false });
+}
+
+
+export function bootstrapStep(opts:Opts):Promise<Opts> {
+  const dir=toolDir(opts,'dbos-bootstrap');
+  return ansible.ansibleWithSpec(opts,{dir,inventory:'inventory.json',playbooks:{create:'main.yml'},hostKeyChecking:false},[
+    spec(template('bootstrap','main.yml'),dir+'/main.yml',opts),
+    contentSpec(dir+'/inventory.json',onceTools.inventory(dataFn(opts))),
+  ]);
 }

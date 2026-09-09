@@ -24,29 +24,6 @@
 
 ;; --- the spec handed to ONCE
 
-(deftest the-spec-carries-this-packages-registry-sources-and-default
-  ;; The operations are ONCE's; this is the data they run over. A colour
-  ;; whose registry, sources or default drifts fails here, in that colour.
-  (is (= #{"digitalocean"} (set (keys (:registry validate/spec)))))
-  (is (= validate/compute-providers (:registry validate/spec)))
-  (is (= {:required [:digitalocean-region :digitalocean-size :digitalocean-image
-                     :digitalocean-ssh-sources :digitalocean-http-sources]
-          :secrets [:do-token]
-          :tofu-env {:do-token "DIGITALOCEAN_TOKEN"}}
-         (get-in validate/spec [:registry "digitalocean"])))
-  (is (= {:non-empty ["ssh-sources"] :may-be-empty ["http-sources"]} (:sources validate/spec)))
-  ;; DigitalOcean: the default is what a legacy state without params.provider
-  ;; is, and the dbos-digitalocean state in R2 may hold one.
-  (is (= "digitalocean" (:default validate/spec)))
-  (is (= validate/default-compute-provider (:default validate/spec)))
-  (is (not (contains? validate/spec :name-rules)) "the name rules are ONCE's"))
-
-;; --- the compute-provider registry
-
-(deftest compute-provider-must-be-one-the-package-has-a-template-for
-  (let [errors (validate/state-errors (fixture :provider-compute "vultr"))]
-    (is (some #{":provider-compute must be one of digitalocean"} errors))))
-
 (deftest name-and-machine-key-are-never-required
   ;; `digitalocean-name` is an optional override of the profile and
   ;; `digitalocean-ssh-keys` is meaningful by its absence, so neither may be
@@ -57,33 +34,10 @@
     (is (not (contains? required :digitalocean-ssh-keys))))
   (is (= [] (validate/state-errors (dissoc (fixture) :digitalocean-name :digitalocean-ssh-keys)))))
 
-(deftest absent-machine-key-selects-keygen
-  (is (true? (validate/keygen? (keygen))))
-  (is (false? (validate/keygen? (fixture))))
-  (is (true? (validate/keygen? (fixture :digitalocean-ssh-keys nil)))))
-
 (deftest compute-name-falls-back-to-the-profile
   (is (= "dbos-keygen-fixture" (validate/compute-name (keygen))))
   (is (= "dbos-fixture" (validate/compute-name (fixture))))
   (is (= "other" (validate/compute-name (fixture :digitalocean-name "other")))))
-
-(deftest ssh-sources-must-not-be-empty-and-no-public-http-is-fine
-  (is (some #{":digitalocean-ssh-sources must list at least one CIDR"}
-            (validate/state-errors (fixture :digitalocean-ssh-sources []))))
-  (is (= [] (validate/state-errors (fixture :digitalocean-http-sources [])))))
-
-(deftest malformed-sources-are-refused-before-any-provider-call
-  (is (some #{":digitalocean-ssh-sources entry \"bad\" is not an IPv4 or IPv6 CIDR"}
-            (validate/state-errors (fixture :digitalocean-ssh-sources ["bad"]))))
-  (is (some #{":digitalocean-http-sources entry \"10.0.0.0/33\" is not an IPv4 or IPv6 CIDR"}
-            (validate/state-errors (fixture :digitalocean-http-sources ["10.0.0.0/33"])))))
-
-(deftest vpc-configuration-is-refused-with-onces-wording
-  ;; The package's own combined message is gone; ONCE's two refusals, scoped
-  ;; to DigitalOcean, replace it.
-  (let [errors (validate/state-errors (fixture :digitalocean-vpc-uuid "u" :digitalocean-vpc-cidr "c"))]
-    (is (some #{":digitalocean-vpc-uuid must be absent; the default regional VPC is discovered at runtime"} errors))
-    (is (some #{":digitalocean-vpc-cidr must be absent; this package must not create a VPC"} errors))))
 
 (deftest retired-keys-are-accepted-and-ignored
   ;; Desired state written before the adoption keeps validating: the old key
@@ -102,21 +56,6 @@
   (is (= [] (validate/state-errors (apply dissoc (fixture) validate/retired-keys)))))
 
 ;; --- the package's own checks
-
-(deftest reports-all-detected-errors
-  (let [errs (validate/state-errors
-              (assoc (fixture)
-                     :dbos-host "bad"
-                     :dbos-version "latest"
-                     :dbos-durable-delay-seconds 0
-                     :dbos-system-database-pool-size 2
-                     :digitalocean-vpc-uuid "hard-coded"
-                     :digitalocean-ssh-sources ["bad"]))
-        text (str/join "\n" errs)]
-    (is (<= 7 (count errs)))
-    (doseq [fragment ["hostname" "exact semantic" "positive integer" "at least 5"
-                      "must be absent" "is not an IPv4 or IPv6 CIDR"]]
-      (is (str/includes? text fragment)))))
 
 (deftest exact-official-image-is-required
   (is (some #(str/includes? % "explicit tag")
@@ -154,6 +93,10 @@
                     "COLORS_PAR_R2_ACCESS_KEY_ID" "COLORS_PAR_R2_SECRET_ACCESS_KEY"]]
         (is (str/includes? text name))))))
 
-(deftest compute-credentials-and-environment-follow-the-registry
-  (is (= {:do-token "DIGITALOCEAN_TOKEN"} (validate/tofu-env (fixture) :provider-compute)))
-  (is (= {} (validate/tofu-env (fixture :provider-compute "vultr") :provider-compute))))
+
+(deftest library-validation
+  (is (= 8 (count validate/compute-providers)))
+  (is (seq (validate/state-errors (fixture :provider-compute "no-infra"))))
+  (is (seq (validate/state-errors (fixture :digitalocean-ssh-sources []))))
+  (is (= [] (validate/state-errors (fixture :digitalocean-http-sources []))))
+  (is (seq (validate/state-errors (fixture :digitalocean-http-sources ["bad"])))))

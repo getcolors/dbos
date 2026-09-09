@@ -1,7 +1,7 @@
 # dbos
 
 A tri-colour Package Skill (green, red, blue) for DBOS durable workflows on one
-DigitalOcean Droplet.
+cloud host.
 The deployment embeds `@dbos-inc/dbos-sdk` **4.25.14** in a TypeScript HTTP API,
 runs PostgreSQL 17 on the same machine, publishes only HTTPS through ONCE and
 Cloudflare, and writes daily PostgreSQL backups to Cloudflare R2.
@@ -13,13 +13,10 @@ The package is pinned exactly and does not use the `4.26.x-preview` line.
 
 ## Architecture and sizing
 
-The compute provider is DigitalOcean, the one entry in the package's provider
-registry (`provider-compute: digitalocean`, per the workspace Compute Provider
-Standard). OpenTofu retrieves the configured region's default VPC with the
-official `digitalocean_vpc` data source, then creates one Droplet and its
-firewall; in keygen mode it also registers the deployment's own machine key
-as an account key named after the profile. It never creates a VPC and desired
-state contains no VPC UUID. ONCE installs Docker and Caddy and runs one
+The package calls colors-compute directly for VM provisioning, SSH keys and
+remote state in R2 or S3. The library supports Azure, AWS, Google,
+DigitalOcean, Hetzner, Vultr, Yandex and OCI. Provider additions require only a
+library version bump. ONCE installs Docker and Caddy and runs one
 application container. Inside that container PostgreSQL binds only to loopback
 and DBOS runs as a library in the Node API. Cloudflare receives one apex A
 record. Ports 80/443 and restricted SSH are the only firewall ingress.
@@ -58,7 +55,7 @@ The same verbs run through the other two colours (`red/red`, `blue/blue`);
 keypair modes. Build and dry-run require no credentials and never read
 `~/.ssh`. The acceptance script checks HTTPS, completion, exactly two activity
 attempts, duplicate-ID behavior and the result hash. It then starts a workflow
-in its durable delay, reboots the entire Droplet with `doctl`, waits for HTTPS
+in its durable delay, reboots the host through its profile SSH alias, waits for HTTPS
 recovery, and verifies status and result.
 
 Services are reconciled by ONCE. A real `create` writes a managed

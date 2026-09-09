@@ -3,28 +3,13 @@
             [green.cli :as green-cli]
             [green.providers :as provider-ops]
             [io.github.getcolors.once.compute :as compute]
-            [io.github.getcolors.once.ssh :as once-ssh]
+            [io.github.getcolors.compute :as library]
+            [io.github.getcolors.compute-ssh :as library-ssh]
+            [io.github.getcolors.dbos.machine :as machine]
             [io.github.getcolors.once.validate :as once-validate]))
 
 (def compute-providers
-  "provider-compute -> what that choice implies.
-
-  `:required` are the non-secret keys that provider's template interpolates,
-  `:secrets` the credentials it needs through COLORS_PAR_*, and `:tofu-env` the
-  subset OpenTofu reads from the process environment itself. Keeping the three
-  together is what stops a provider being validated against one set of keys and
-  run with another. The keys of this map are the advertised providers; a
-  provider without a template directory and a golden is not advertised, and
-  this package advertises one.
-
-  Two keys the template reads are deliberately not required. `digitalocean-name`
-  is an optional override of the profile (Compute Name Standard), and
-  `digitalocean-ssh-keys` is meaningful by its absence (SSH Keypair Standard)."
-  {"digitalocean"
-   {:required [:digitalocean-region :digitalocean-size :digitalocean-image
-               :digitalocean-ssh-sources :digitalocean-http-sources]
-    :secrets [:do-token]
-    :tofu-env {:do-token "DIGITALOCEAN_TOKEN"}}})
+  (into {} (map (fn [[name entry]] [(clojure.core/name name) (-> entry (update :required #(mapv keyword %)) (update :secrets #(mapv keyword %)))]) (:compute library/registry))))
 
 (def default-compute-provider
   "The provider a deployment created before this package recorded one in its
@@ -108,7 +93,7 @@
   "Whether this deployment owns its machine keypair. Delegates to ONCE, the
   standard's reference implementation, so one rule decides it everywhere."
   [opts]
-  (once-ssh/keygen? opts))
+  (= "managed" (:mode (library-ssh/mode (machine/clean opts)))))
 
 (def cidrs
   "A source list as desired state or an overlay string carries it. ONCE's, so
@@ -128,7 +113,7 @@
   [opts]
   (vec
    (concat
-    (for [k (concat required (compute/required-keys spec opts))
+    (for [k required
           :when (placeholder? (get opts k))]
       (str k " is required"))
     (when-not (or (placeholder? (:dbos-host opts))
@@ -157,7 +142,7 @@
     (when (and (integer? (:dbos-system-database-pool-size opts))
                (< (:dbos-system-database-pool-size opts) 5))
       [":dbos-system-database-pool-size must be at least 5 for production"])
-    (compute/state-errors spec opts))))
+    (machine/errors opts))))
 
 (defn backend-secrets [opts]
   (:secrets (get-in once-validate/providers
@@ -167,7 +152,7 @@
   "Credentials every real create and delete needs: the selected compute
   provider's, Cloudflare's, and the backend's."
   [opts]
-  (concat (compute/secrets spec opts) [:cloudflare-api-token] (backend-secrets opts)))
+  (conj (mapv #(-> % (subs 11) str/lower-case (str/replace "_" "-") keyword) (library/credential-requirements (machine/clean opts))) :cloudflare-api-token))
 
 (defn secret-errors
   "The credentials a real `event` needs. A create needs the application

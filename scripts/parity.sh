@@ -24,11 +24,12 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
 build_variant() {
   local variant=$1 state="$root/test/fixtures/$1.yml"
+  shift
   (cd "$root/green" && env DBOS_LIB_ROOT="$root" \
-    COLORS_PAR_WORKDIR="$tmp/$variant/green" ./green build -f "$state" >/dev/null)
+    COLORS_PAR_WORKDIR="$tmp/$variant/green" "$@" ./green build -f "$state" >/dev/null)
   (cd "$root/red" && env DBOS_LIB_ROOT="$root" \
-    COLORS_PAR_WORKDIR="$tmp/$variant/red" ./red build -f "$state" >/dev/null)
-  (cd "$root/blue" && env COLORS_PAR_WORKDIR="$tmp/$variant/blue" \
+    COLORS_PAR_WORKDIR="$tmp/$variant/red" "$@" ./red build -f "$state" >/dev/null)
+  (cd "$root/blue" && env COLORS_PAR_WORKDIR="$tmp/$variant/blue" "$@" \
     uv run python -m package_dbos_blue build -f "$state" >/dev/null)
   diff -r "$tmp/$variant/green" "$tmp/$variant/red"
   diff -r "$tmp/$variant/green" "$tmp/$variant/blue"
@@ -36,8 +37,20 @@ build_variant() {
 
 build_variant colors
 build_variant keygen
+build_variant keygen COLORS_PAR_PROVIDER_BACKEND=s3 COLORS_PAR_S3_BUCKET=fixture-state COLORS_PAR_S3_REGION=eu-west-1
+build_variant colors COLORS_PAR_COMPUTE_HTTP_SOURCES=
 
 diff -r "$root/green/src/resources/io/github/getcolors/dbos" "$root/red/resources"
 diff -r "$root/green/src/resources/io/github/getcolors/dbos" "$root/blue/src/package_dbos_blue/resources"
 
 echo "green, red, and blue DBOS artifacts are byte-identical"
+
+(cd "$root/green" && bb ../scripts/machine-green.clj "$root/test/fixtures/machine.json") > "$tmp/machine-green"
+(cd "$root/red" && bun ../scripts/machine-red.ts "$root/test/fixtures/machine.json") > "$tmp/machine-red"
+(cd "$root/blue" && uv run python ../scripts/machine-blue.py "$root/test/fixtures/machine.json") > "$tmp/machine-blue"
+python3 - "$tmp" <<'PYTHON'
+import json,pathlib,sys
+root=pathlib.Path(sys.argv[1])
+a=[json.loads((root/('machine-'+color)).read_text()) for color in ['green','red','blue']]
+assert a[0]==a[1]==a[2], 'recorded node parameters differ'
+PYTHON

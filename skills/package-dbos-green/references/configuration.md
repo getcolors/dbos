@@ -1,10 +1,8 @@
 # Configuration
 
-`colors.yml` is the only editable desired-state file. Core keys select the
-profile, workdir, DigitalOcean/Cloudflare/R2 providers and protected lifecycle.
-The package supports one compute provider, DigitalOcean, selected by
-`provider-compute: digitalocean`; any other value is refused with the
-advertised list.
+`colors.yml` contains desired state. Select a library VM provider with
+`provider-compute`, and R2 or S3 with `provider-backend`. Supported providers
+are azure, aws, google, digitalocean, hcloud, vultr, yandex and oci.
 
 DBOS keys pin the public hostname, image and exact SDK version; configure the
 durable delay, retry attempts/backoff, retention and system database pool.
@@ -45,9 +43,9 @@ desired state and do not delete backup objects with compute.
 | `digitalocean-name` | no | Droplet and firewall name; the profile by default |
 | `digitalocean-ssh-keys` | no | An existing account key id; absent means keygen mode |
 
-No VPC UUID or CIDR is accepted: the package looks up the configured region's
-default VPC at runtime, verifies it is DigitalOcean's default, and never
-creates a VPC.
+Network selection belongs to the library. Public singleton mode uses no owned
+private network when the provider supports it. Explicit library network
+options are available when the deployment needs them.
 
 ### Firewall sources
 
@@ -69,8 +67,8 @@ does not carry it. A key on disk with no matching state, or an account key of
 that name this deployment does not own, refuses the create rather than being
 overwritten or adopted. Set `digitalocean-ssh-keys` to an existing account key
 id to opt out; the package then creates and deletes no key material, and the
-Droplet's `remote-exec` wait for cloud-init relies on the operator's SSH agent
-holding that key.
+application preparation stage uses that key through the SSH agent, or an
+explicit `ssh-private-key-path`. It waits for SSH and cloud-init in Ansible.
 
 ### The `~/.ssh/config` block
 
@@ -103,24 +101,24 @@ first value it obtains and a `Host *` stanza above it would win on `User` and
 `IdentityFile`. Two layouts make a real create refuse rather than rewrite the
 file, each naming the file and the line: a `Host <profile>` stanza outside
 the markers (remove or rename it if it is stale, or change `profile` if it
-belongs to something else — the package never overwrites it), and an option
+belongs to something else. the package never overwrites it), and an option
 standing above the first `Host` or `Match` line, which is global today and
 would be captured into this one stanza (move it below the managed block, or
 into an explicit `Host *` stanza at the end of the file).
 
 ### Provider state
 
-Every real `create` and `delete` reads the compute state before validating
-the provider credentials. A state recorded by another provider is refused on
-both events, because switching is a rebuild; a state recorded before this
-package wrote `params.provider` is treated as DigitalOcean's, the only
-provider it ever offered. An unreadable backend counts as no state on a
-create (a fresh clone has none) and fails a delete closed.
+The library coordinates shared and per-node remote state. The package loads
+recorded node parameters for delete, and refuses missing or unreadable
+inventory. The old `<profile>/tofu-compute.tfstate` needs explicit migration.
+Changing provider or replacing owned resources requires the library's
+explicit lifecycle rules. Build placeholders must never reach a real
+application step.
 
 ### Retired keys
 
 These keys were read by this package before it adopted the workspace
-standards. They are accepted and ignored — never required, never refused —
+standards. They are accepted and ignored. never required, never refused —
 so a `colors.yml` written before the adoption keeps validating unchanged:
 
 | Key | Replaced by |
@@ -132,3 +130,20 @@ so a `colors.yml` written before the adoption keeps validating unchanged:
 | `digitalocean-vpc-mode` | nothing; there was only ever one value. `digitalocean-vpc-uuid` and `digitalocean-vpc-cidr` are refused instead |
 
 Remove them at leisure; nothing renders from them.
+
+## Other providers and backends
+
+Azure uses the ambient Azure CLI session. AWS and S3 use the ambient AWS
+credential chain. Google uses Application Default Credentials. OCI uses
+`oci-config-file-profile` from `~/.oci/config`. Token providers use
+`COLORS_PAR_DO_TOKEN`, `COLORS_PAR_HCLOUD_TOKEN`, `COLORS_PAR_VULTR_API_KEY`
+or `COLORS_PAR_YANDEX_TOKEN`. R2 uses the two state credentials listed above;
+S3 requires `s3-bucket` and `s3-region` instead of the R2 endpoint and bucket.
+Cloudflare credentials remain required for DNS. Application credentials are
+required on create only. No GitHub token is needed for the public image.
+
+`compute-ssh-sources` and `compute-http-sources` are provider-neutral source
+lists. Existing provider-prefixed source lists remain supported. Explicit
+SSH references select external key ownership; omitted references select
+managed mode. The package strips its retired public-file option before
+calling the library, so it does not change DBOS key ownership.

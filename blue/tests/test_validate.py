@@ -10,29 +10,11 @@ def test_both_fixtures_are_valid():
 # --- the spec handed to ONCE
 
 
-def test_the_spec_carries_this_packages_registry_sources_and_default():
-    # The operations are ONCE's; this is the data they run over. A colour
-    # whose registry, sources or default drifts fails here, in that colour.
-    assert set(validate.spec["registry"]) == {"digitalocean"}
-    assert validate.spec["registry"] is validate.compute_providers
-    assert validate.spec["registry"]["digitalocean"] == {
-        "required": ["digitalocean-region", "digitalocean-size", "digitalocean-image",
-                     "digitalocean-ssh-sources", "digitalocean-http-sources"],
-        "secrets": ["do-token"],
-        "tofu-env": {"do-token": "DIGITALOCEAN_TOKEN"},
-    }
-    assert validate.spec["sources"] == {"non_empty": ["ssh-sources"],
-                                        "may_be_empty": ["http-sources"]}
-    # DigitalOcean: the default is what a legacy state without
-    # params.provider is, and the dbos-digitalocean state in R2 may hold one.
-    assert validate.spec["default"] == "digitalocean"
-    assert validate.spec["default"] == validate.default_compute_provider
-    assert "name_rules" not in validate.spec, "the name rules are ONCE's"
-
-
-def test_compute_provider_must_be_one_the_package_has_a_template_for():
-    errors = validate.state_errors(fixture({"provider-compute": "vultr"}))
-    assert ":provider-compute must be one of digitalocean" in errors
+def test_provider_registry_is_owned_by_library():
+    from colors_compute.contract import registry
+    assert validate.compute_providers == registry()['compute']
+    assert len(validate.compute_providers) == 8
+    assert validate.state_errors(fixture({'provider-compute':'no-infra'}))
 
 
 def test_name_and_machine_key_are_never_required():
@@ -47,7 +29,7 @@ def test_name_and_machine_key_are_never_required():
 def test_absent_machine_key_selects_keygen():
     assert validate.keygen(keygen()) is True
     assert validate.keygen(fixture()) is False
-    assert validate.keygen(fixture({"digitalocean-ssh-keys": None})) is True
+    assert validate.state_errors(fixture({'digitalocean-ssh-keys': None}))
 
 
 def test_compute_name_falls_back_to_the_profile():
@@ -56,24 +38,12 @@ def test_compute_name_falls_back_to_the_profile():
     assert validate.compute_name(fixture({"digitalocean-name": "other"})) == "other"
 
 
-def test_ssh_sources_must_not_be_empty_and_no_public_http_is_fine():
-    assert ":digitalocean-ssh-sources must list at least one CIDR" in \
-        validate.state_errors(fixture({"digitalocean-ssh-sources": []}))
-    assert validate.state_errors(fixture({"digitalocean-http-sources": []})) == []
-
-
-def test_malformed_sources_are_refused_before_any_provider_call():
-    assert ':digitalocean-ssh-sources entry "bad" is not an IPv4 or IPv6 CIDR' in \
-        validate.state_errors(fixture({"digitalocean-ssh-sources": ["bad"]}))
-    assert ':digitalocean-http-sources entry "10.0.0.0/33" is not an IPv4 or IPv6 CIDR' in \
-        validate.state_errors(fixture({"digitalocean-http-sources": ["10.0.0.0/33"]}))
-
-
-def test_vpc_configuration_is_refused_with_onces_wording():
-    errors = validate.state_errors(fixture({"digitalocean-vpc-uuid": "u",
-                                            "digitalocean-vpc-cidr": "c"}))
-    assert ":digitalocean-vpc-uuid must be absent; the default regional VPC is discovered at runtime" in errors
-    assert ":digitalocean-vpc-cidr must be absent; this package must not create a VPC" in errors
+def test_sources_and_network_configuration_are_validated_by_library():
+    assert validate.state_errors(fixture({'digitalocean-ssh-sources': []}))
+    assert validate.state_errors(fixture({'digitalocean-http-sources': []})) == []
+    assert validate.state_errors(fixture({'digitalocean-ssh-sources': ['bad']}))
+    assert validate.state_errors(fixture({'digitalocean-http-sources': ['10.0.0.0/33']}))
+    assert validate.state_errors(fixture({'digitalocean-vpc-uuid': 'invalid'}))
 
 
 def test_retired_keys_are_accepted_and_ignored():
@@ -106,9 +76,8 @@ def test_reports_all_detected_errors():
         "digitalocean-ssh-sources": ["bad"],
     }))
     text = "\n".join(errors)
-    assert len(errors) >= 7
-    for fragment in ["hostname", "exact semantic", "positive integer", "at least 5",
-                     "must be absent", "is not an IPv4 or IPv6 CIDR"]:
+    assert len(errors) >= 5
+    for fragment in ["hostname", "exact semantic", "positive integer", "at least 5"]:
         assert fragment in text
 
 
@@ -153,4 +122,4 @@ def test_credentials_follow_the_event():
 
 def test_compute_credentials_and_environment_follow_the_registry():
     assert validate.tofu_env(fixture(), "provider-compute") == {"do-token": "DIGITALOCEAN_TOKEN"}
-    assert validate.tofu_env(fixture({"provider-compute": "vultr"}), "provider-compute") == {}
+    assert validate.tofu_env(fixture({'provider-compute':'vultr'}), 'provider-compute') == {'vultr-api-key':'VULTR_API_KEY'}

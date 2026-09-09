@@ -4,23 +4,9 @@ version = "0.1.0"
 description = "Blue/Python implementation of the DBOS package"
 requires-python = ">=3.11"
 dependencies = [
-    "blue",
-    "package-once-blue",
-]
-
-[tool.uv.sources]
-blue = { git = "https://github.com/getcolors/blue.git", rev = "290f313ead5ca162875c33a049c880da017eae09" }
-package-once-blue = { git = "https://github.com/getcolors/once.git", subdirectory = "blue", rev = "38e3cd66674a32fb96605e1b17ae6791086ad5c1" }
-
-# package-once-blue at the ONCE pin above now pins the same blue rev, so this
-# override is redundant; it is kept because it is harmless and would make this
-# package's blue pin win again were ONCE ever to pin an older one (as it did at
-# 6952711, whose 369c5aa made the two git URLs conflict and uv refuse to
-# resolve), the way tools.deps lets the top-level green pin win in
-# green/deps.edn.
-[tool.uv]
-override-dependencies = [
-    "blue @ git+https://github.com/getcolors/blue.git@290f313ead5ca162875c33a049c880da017eae09",
+  "blue @ git+https://github.com/getcolors/blue.git@290f313ead5ca162875c33a049c880da017eae09",
+  "package-once-blue @ git+https://github.com/getcolors/once.git@a1fe1be7a427dd2e406ff7befd1c43a53e7c3618#subdirectory=blue",
+  "colors-compute-blue @ git+https://github.com/getcolors/colors-compute.git@422c3f39d22be93efa703da09eb192490942ede3#subdirectory=blue",
 ]
 
 [dependency-groups]

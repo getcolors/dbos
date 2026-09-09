@@ -13,7 +13,10 @@ import re
 from blue.cli import par_name
 from blue.providers import placeholder
 from package_once_blue import compute as once_compute
-from package_once_blue import ssh as once_ssh
+from colors_compute import credential_requirements
+from colors_compute.contract import registry
+from colors_compute.ssh import _mode
+from . import machine
 from package_once_blue.validate import providers as once_providers
 
 # provider-compute -> what that choice implies.
@@ -29,14 +32,7 @@ from package_once_blue.validate import providers as once_providers
 # Two keys the template reads are deliberately not required. `digitalocean-name`
 # is an optional override of the profile (Compute Name Standard), and
 # `digitalocean-ssh-keys` is meaningful by its absence (SSH Keypair Standard).
-compute_providers = {
-    "digitalocean": {
-        "required": ["digitalocean-region", "digitalocean-size", "digitalocean-image",
-                     "digitalocean-ssh-sources", "digitalocean-http-sources"],
-        "secrets": ["do-token"],
-        "tofu-env": {"do-token": "DIGITALOCEAN_TOKEN"},
-    },
-}
+compute_providers = registry()["compute"]
 
 # The provider a deployment created before this package recorded one in its
 # compute output must be running: the only one it ever offered. The
@@ -122,7 +118,7 @@ compute_name = once_compute.compute_name
 def keygen(opts: dict) -> bool:
     """Whether this deployment owns its machine keypair. Delegates to ONCE, the
     standard's reference implementation, so one rule decides it everywhere."""
-    return once_ssh.keygen(opts)
+    return _mode(machine.clean(opts))['mode'] == 'managed'
 
 
 # A source list as desired state or an overlay string carries it. ONCE's, so
@@ -148,7 +144,7 @@ def state_errors(opts: dict) -> list[str]:
     provider rules, DigitalOcean's VPC refusals among them — which are ONCE's
     over `spec`. The retired keys are not looked at."""
     errors: list[str] = []
-    for key in [*required, *once_compute.required_keys(spec, opts)]:
+    for key in required:
         if placeholder(opts.get(key)):
             errors.append(f":{key} is required")
     if not placeholder(opts.get("dbos-host")) and not HOST_RE.match(str(opts.get("dbos-host"))):
@@ -174,7 +170,7 @@ def state_errors(opts: dict) -> list[str]:
     pool = opts.get("dbos-system-database-pool-size")
     if isinstance(pool, int) and not isinstance(pool, bool) and pool < 5:
         errors.append(":dbos-system-database-pool-size must be at least 5 for production")
-    errors += once_compute.state_errors(spec, opts)
+    errors += machine.errors(opts)
     return errors
 
 
@@ -186,7 +182,7 @@ def backend_secrets(opts: dict) -> list[str]:
 def infrastructure_secrets(opts: dict) -> list[str]:
     """Credentials every real create and delete needs: the selected compute
     provider's, Cloudflare's, and the backend's."""
-    return [*once_compute.secrets(spec, opts), "cloudflare-api-token", *backend_secrets(opts)]
+    return [key.removeprefix('COLORS_PAR_').lower().replace('_','-') for key in credential_requirements(machine.clean(opts))] + ['cloudflare-api-token']
 
 
 def secret_errors(opts: dict, event: str = "create") -> list[str]:

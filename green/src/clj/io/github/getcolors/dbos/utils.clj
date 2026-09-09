@@ -1,7 +1,7 @@
 (ns io.github.getcolors.dbos.utils
   (:require [clojure.string :as str]))
 
-(def contract 1)
+(def contract 2)
 
 (defn registrable-domain [host]
   (str/join "." (take-last 2 (str/split (str host) #"\."))))

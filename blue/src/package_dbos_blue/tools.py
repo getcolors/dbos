@@ -12,7 +12,7 @@ from blue.scaffold import PRESERVE_JINJA_DELIMITERS, content_spec, scaffold
 from package_once_blue import compute as once_compute
 from package_once_blue import tools as once_tools
 
-from . import ssh_config, validate
+from . import ssh_config, validate, machine
 from .utils import par_lookup, registrable_domain
 
 _RESOURCE_ROOT = Path(__file__).parent / "resources"
@@ -98,62 +98,13 @@ def with_once_shape(opts: dict) -> dict:
 
 # ---------------------------------------------------------------- compute
 
-# What `build` and `--dry-run` render in place of a compute output: the
-# documentation address, shaped like the real `params` so every later stage
-# sees the same keys either way. ONCE's.
-fallback_params = once_compute.fallback_params
+fallback_params = machine.fallback_params
 
-# Refuse to hand 192.0.2.10 to Ansible on a real converge whose compute output
-# carries no `ip`. ONCE's; `tofu_compute_step` is what wires it.
-resolved_compute = once_compute.resolved_compute
+def with_compute_params(opts, params):
+    return {**opts, **params, 'once/compute-params': params}
 
-
-def with_compute_params(opts: dict, params: dict) -> dict:
-    """The bridge to ONCE's composed stages. `once_tools.tofu_dns_step` and the
-    remote stage read the machine's address, user and name as
-    `once/compute-params`, the key ONCE's own compute step sets; this
-    package's compute step sets it from the same params it merges at top level
-    — real, fallback, or, on delete, the ones adopted from state — so the
-    ONCE stages keep working unchanged."""
-    return {**opts, "once/compute-params": params}
-
-
-def compute_data(opts: dict) -> dict:
-    """Template values for the compute stage. The name, the keypair mode and
-    the source lists are resolved here once, so the template interpolates
-    values and never branches on which provider it belongs to."""
-    return {**opts,
-            "ssh-keygen": validate.keygen(opts),
-            "compute-name": validate.compute_name(opts),
-            "ssh-sources-hcl": tofu.hcl_list(
-                validate.cidrs(opts, validate.compute_key(opts, "ssh-sources"))),
-            "http-sources-hcl": tofu.hcl_list(
-                validate.cidrs(opts, validate.compute_key(opts, "http-sources")))}
-
-
-def compute_template(opts: dict) -> dict:
-    """Providers are selected by template directory, `infrastructure/<provider>/`,
-    not by conditionals inside one file; the rendered target is the same
-    `tofu-compute/main.tf` whichever directory it came from."""
-    return template(f"infrastructure.{opts.get('provider-compute')}", "main.tf")
-
-
-async def tofu_compute_step(opts: dict) -> dict:
-    dir = tool_dir(opts, COMPUTE_TOOL)
-    specs = [_spec(compute_template(opts), f"{dir}/main.tf", compute_data(opts))]
-    result = await tofu.tofu_with_spec(opts, specs, dir=dir, env=compute_credential_env(opts))
-    fallback = fallback_params(opts)
-    if (result.get("blue/exit") or 0) > 0:
-        return result
-    if opts.get("blue/event") == "build":
-        return with_compute_params({**result, **fallback}, fallback)
-    if opts.get("blue/event") == "delete":
-        return result
-    outputs = once_compute.output_params(result)
-    resolved = resolved_compute(result, fallback, outputs)
-    if (resolved.get("blue/exit") or 0) > 0:
-        return resolved
-    return with_compute_params(resolved, {**fallback, **(outputs or {})})
+async def tofu_compute_step(opts):
+    return await machine.step(opts)
 
 
 # ---------------------------------------------------------- ansible (local)
@@ -186,8 +137,7 @@ async def ansible_local_step(opts: dict) -> dict:
         dir=dir, inventory="inventory.ini",
         playbooks={"create": "main.yml", "delete": "main.yml"},
         extra_vars={"host_alias": ssh_config.host_alias(opts),
-                    "ip": opts.get("ip") or fallback_params(opts)["ip"],
-                    "user": opts.get("user") or "root",
+                    "ssh_hosts": [{'name': opts.get('profile'), 'ip': opts.get('ip'), 'user': opts.get('user'), 'identity_file': opts.get('ssh-private-key-path')}],
                     "block_state": "absent" if delete else "present"})
 
 
@@ -212,7 +162,7 @@ def _once_template(name: str) -> dict:
 
 def _data(opts: dict) -> dict:
     return {**opts, "sudoer": opts.get("sudoer") or "root",
-            "hosts": [opts.get("ip") or "64.227.72.100"], "users": []}
+            "hosts": [opts.get("ip")], "users": []}
 
 
 # The yaml writer ONCE's colours share, copied because ONCE does not export it.
@@ -315,3 +265,11 @@ async def ansible_remote_step(opts: dict) -> dict:
         return rendered
     return await ansible_step(rendered, dir=dir, inventory="inventory.json",
                               playbooks={"create": "main.yml"}, host_key_checking=False)
+
+
+async def bootstrap_step(opts):
+    directory = tool_dir(opts, 'dbos-bootstrap')
+    specs = [_spec(template('bootstrap', 'main.yml'), directory+'/main.yml', opts),
+             content_spec(directory+'/inventory.json', once_tools.inventory(_data(opts)))]
+    return await ansible_with_spec(opts, specs, dir=directory, inventory='inventory.json',
+                                   playbooks={'create':'main.yml'}, host_key_checking=False)
