@@ -76,6 +76,8 @@ async def step(opts):
 
 async def load(opts, env=None):
     result = await read_deployment(clean(opts), env)
+    if result['status'] == 'destroyed' and opts.get('blue/event') == 'delete':
+        return {**opts, 'colors-compute/already-destroyed': True, 'blue/exit': 0}
     if result['status'] != 'present':
         return {**opts, 'blue/exit': 1, 'blue/err': 'compute inventory unavailable; legacy state requires explicit migration'}
     adopted = params(opts, result)

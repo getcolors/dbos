@@ -85,3 +85,8 @@ paths already encode the repository. Never add one tag without the other.
 ## Git
 
 Work on the current branch. Do not commit or push unless explicitly authorized.
+
+A repeated delete whose validated library inspection reports destroyed stops
+after start, without key files or repeated cleanup. Credential validation still
+runs first. The same inspection status is refused outside delete, and workflow
+failure routing remains unchanged.

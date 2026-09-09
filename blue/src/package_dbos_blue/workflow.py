@@ -98,8 +98,14 @@ side_effecting_steps = ["dbos/compute", "dbos/ssh-config", "dbos/dns",
                         "dbos/ansible-remote", "dbos/ansible-cleanup", "dbos/bootstrap"]
 
 
+def next_fn(_step, successors, opts):
+    if failed(opts) or opts.get("colors-compute/already-destroyed") is True:
+        return []
+    return [(step, opts) for step in successors or []]
+
+
 def create_workflow():
-    wf = workflow(start="dbos/start", wire_fn=wire_fn)
+    wf = workflow(start="dbos/start", wire_fn=wire_fn, next_fn=next_fn)
     wf = advice_add(wf, "dbos/dns", "before", "dbos.workflow/backend",
                     backend_advice(tools.DNS_TOOL))
     return dry_run.advise(progress.advise(wf), side_effecting_steps)

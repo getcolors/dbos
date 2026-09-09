@@ -4,7 +4,7 @@ import * as dryRun from "red/dry-run";
 import { preflight, type PreflightContext } from "red/lifecycle";
 import * as progress from "red/progress";
 import * as tofu from "red/tofu";
-import { adviceAdd, failed, workflow, type Opts, type WireDecl } from "red/workflow";
+import { adviceAdd, failed, workflow, type NextFn, type Opts, type WireDecl } from "red/workflow";
 import { compute, tools as onceTools } from "package-once-red";
 import * as machine from "./machine.ts";
 import * as sshConfig from "./ssh-config.ts";
@@ -93,8 +93,12 @@ export const sideEffectingSteps = [
   "dbos/ansible-remote", "dbos/ansible-cleanup", "dbos/bootstrap",
 ];
 
+export const nextFn: NextFn = (_step, successors, opts) =>
+  failed(opts) || opts['colors-compute/already-destroyed'] === true
+    ? [] : (successors ?? []).map(step => [step, opts] as const);
+
 function create() {
-  let wf = workflow({ start: "dbos/start", wireFn });
+  let wf = workflow({ start: "dbos/start", wireFn, nextFn });
   wf = adviceAdd(wf, "dbos/dns", "before", "dbos.workflow/backend", backendAdvice(tools.dnsTool));
   return dryRun.advise(progress.advise(wf), sideEffectingSteps);
 }

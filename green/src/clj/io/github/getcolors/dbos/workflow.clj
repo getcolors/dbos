@@ -88,8 +88,12 @@
   [:dbos/compute :dbos/ssh-config :dbos/dns
    :dbos/ansible-remote :dbos/ansible-cleanup :dbos/bootstrap])
 
+(defn next-fn [_ successors opts]
+  (if (or (wf/failed? opts) (true? (:colors-compute/already-destroyed opts)))
+    [] (mapv #(vector % opts) successors)))
+
 (def workflow
-  (-> (wf/workflow {:start :dbos/start :wire-fn wire-fn})
+  (-> (wf/workflow {:start :dbos/start :wire-fn wire-fn :next-fn next-fn})
       (wf/advice-add :dbos/dns :before ::backend (backend-advice tools/dns-tool))
       progress/advise
       (dry-run/advise side-effecting-steps)))
