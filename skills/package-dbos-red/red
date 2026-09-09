@@ -39,7 +39,7 @@ import { homedir } from "node:os";
 // directory, which would halt Bun's upward resolution of `package-dbos-red`
 // and break the development symlink at red/red.
 const PINS = {
-  "package-dbos-red": "github:getcolors/dbos#eece3567825ca3734bca31df55919673b9439b6a",
+  "package-dbos-red": "github:getcolors/dbos#e32bb69911063af987c496c06ebce4887e6da319",
 };
 
 // PINS is the only source of versions, as green's inline SHA and blue's PEP
