@@ -4,7 +4,7 @@
 # dependencies = ["package-dbos-blue"]
 #
 # [tool.uv.sources]
-# package-dbos-blue = { git = "https://github.com/getcolors/dbos.git", rev = "e32bb69911063af987c496c06ebce4887e6da319", subdirectory = "blue" }
+# package-dbos-blue = { git = "https://github.com/getcolors/dbos.git", rev = "d4ccb9c0bd6f871a6bbbf7ff3b1f861a82032ea0", subdirectory = "blue" }
 # ///
 #
 # Managed by `bb pin` — do not edit by hand, and never invent a SHA.
