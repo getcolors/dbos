@@ -40,6 +40,11 @@ import { homedir } from "node:os";
 // and break the development symlink at red/red.
 const PINS = {
   "package-dbos-red": "github:getcolors/dbos#d4ccb9c0bd6f871a6bbbf7ff3b1f861a82032ea0",
+  // The Red SDK is a peer of colors-compute-red, not a dependency: a cold
+  // cache satisfies a peer only from this manifest's own dependencies, so the
+  // launcher pins it explicitly, at the commit red/package.json pins.
+  // scripts/launcher.sh checks they agree.
+  "red": "github:getcolors/red#db9bfe61282e2093f4098bf5a6ee0cd10added6e",
 };
 
 // PINS is the only source of versions, as green's inline SHA and blue's PEP

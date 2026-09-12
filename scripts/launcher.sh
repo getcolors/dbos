@@ -33,9 +33,12 @@ grep -q "getcolors/colors-compute#$compute_sha" "$root/red/package.json"
 grep -q "getcolors/colors-compute#$compute_sha" "$root/package.json"
 grep -q "colors-compute.git@$compute_sha#subdirectory=blue" "$root/blue/pyproject.toml"
 
-# colors-compute-red declares the Red SDK as a peer, not a dependency, so a
-# cold launcher cache installs the SDK only because the facade manifest
-# (package.json, the graph PINS resolves) names it. The pin must be the one
+# colors-compute-red declares the Red SDK as a peer, not a dependency. Bun
+# satisfies a peer only from the install root's own dependencies, so the
+# payload PINS the SDK itself; the facade manifest names it only as an
+# optional peer plus a devDependency (which keeps the repository root lockfile
+# off npm's unrelated `red`), never as a dependency, because Bun cannot
+# resolve one GitHub specifier at two depths. Every record must be the commit
 # red/package.json tests against, and a cold cache must actually resolve it:
 # the working-tree builds above reuse installed node_modules and cannot see a
 # missing peer.
@@ -43,6 +46,7 @@ red_launcher="$root/skills/package-dbos-red/red"
 red_sdk_sha=$(grep -oE '"red": "github:getcolors/red#[0-9a-f]{40}"' "$root/red/package.json" | grep -oE '[0-9a-f]{40}')
 [[ -n $red_sdk_sha ]]
 grep -q "\"red\": \"github:getcolors/red#$red_sdk_sha\"" "$root/package.json"
+grep -q "\"red\": \"github:getcolors/red#$red_sdk_sha\"" "$red_launcher"
 mkdir "$tmp/red-cold"
 cp "$red_launcher" "$tmp/red-cold/red"; chmod +x "$tmp/red-cold/red"
 cp "$root/test/fixtures/colors.yml" "$tmp/red-cold/colors.yml"
