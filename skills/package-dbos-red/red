@@ -39,7 +39,7 @@ import { homedir } from "node:os";
 // directory, which would halt Bun's upward resolution of `package-dbos-red`
 // and break the development symlink at red/red.
 const PINS = {
-  "package-dbos-red": "github:getcolors/dbos#d4ccb9c0bd6f871a6bbbf7ff3b1f861a82032ea0",
+  "package-dbos-red": "github:getcolors/dbos#187a286cf7389160152b60d9ab45c4cbcbb0b895",
   // The Red SDK is a peer of colors-compute-red, not a dependency: a cold
   // cache satisfies a peer only from this manifest's own dependencies, so the
   // launcher pins it explicitly, at the commit red/package.json pins.
