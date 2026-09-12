@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
   "blue @ git+https://github.com/getcolors/blue.git@290f313ead5ca162875c33a049c880da017eae09",
   "package-once-blue @ git+https://github.com/getcolors/once.git@a1fe1be7a427dd2e406ff7befd1c43a53e7c3618#subdirectory=blue",
-  "colors-compute-blue @ git+https://github.com/getcolors/colors-compute.git@422c3f39d22be93efa703da09eb192490942ede3#subdirectory=blue",
+  "colors-compute-blue @ git+https://github.com/getcolors/colors-compute.git@ae28ea74962bb1897fa6365c143c1d43ac1fe095#subdirectory=blue",
 ]
 
 [dependency-groups]
